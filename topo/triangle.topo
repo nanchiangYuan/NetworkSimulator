@@ -1,0 +1,12 @@
+host h1 1
+host h2 2
+host h3 3
+router r1 4
+router r2 5
+router r3 6
+link r1 h1 0 0 0
+link r2 h2 0 0 0
+link r3 h3 0 0 0
+link r1 r2 0 0 0
+link r1 r3 0 0 0
+link r2 r3 0 0 0
