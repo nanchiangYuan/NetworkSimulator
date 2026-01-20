@@ -1,15 +1,21 @@
+import java.util.concurrent.LinkedBlockingQueue;
+
 public class Link {
     private int queueSize;
-    private int bandwidth;
+    private int bandwidth; // in bits
     private int latency;
+    private LinkedBlockingQueue<SimplePacket> buffer;
 
+    private Scheduler scheduler;
     private Node[] connections;
 
-    Link(Node n1, Node n2, int queueSize, int bandwidth, int latency) {
+    Link(Node n1, Node n2, int queueSize, int bandwidth, int latency, Scheduler scheduler) {
         this.queueSize = queueSize;
         this.bandwidth = bandwidth;
         this.latency = latency;
+        this.buffer = new LinkedBlockingQueue<>(queueSize);
         this.connections = new Node[]{n1, n2};
+        this.scheduler = scheduler;
     }
 
     public void setConnections(Node n1, Node n2) {
@@ -49,8 +55,27 @@ public class Link {
         return "link: " + this.connections[0].getName() + ", " + this.connections[1].getName();
     }
 
-    public void sendPacket(TCPmessage packet) {
+    public boolean send(SimplePacket packet, Node source) {
 
+        
+        Node dest;
+        if(source.equals(this.connections[0]))
+            dest = this.connections[1];
+        else
+            dest = this.connections[0];
+        if(dest == null)
+            return false;
+
+        double currentTime = this.scheduler.getCurrentTime();
+        double arrivalTime = currentTime ++;
+        
+
+        this.scheduler.getQueue().add(new Event(packet, Event.EventType.ARRIVE, arrivalTime));
+        return false;
+    }
+
+    public boolean receive(SimplePacket packet) {
+        return false;
     }
 
 

@@ -2,6 +2,7 @@ import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.Objects;
 import java.util.Queue;
+import java.util.concurrent.ArrayBlockingQueue;
 
 /**
  * Class for routers and hosts.
@@ -11,12 +12,20 @@ public class Node {
     private String name;
     private HashMap<Node, Link> routingTable;
     private HashMap<Node, Link> links;          // for building routing table
+    private SimpleNetwork network;
+    private ArrayBlockingQueue<SimplePacket> received;
+    private long timeout;
+    private Scheduler scheduler;
 
-    Node(String nodeName, short nodeID) {
+    Node(String nodeName, short nodeID, SimpleNetwork network, Scheduler scheduler) {
         this.ID = nodeID;
         this.name = nodeName;
         this.routingTable = new HashMap<>();
         this.links = new HashMap<>();
+        this.network = network;
+        this.received = new ArrayBlockingQueue<>(1);
+        this.timeout = 0;
+        this.scheduler = scheduler;
     }
 
     public short getID() {
@@ -24,6 +33,10 @@ public class Node {
     }
     public String getName() {
         return this.name;
+    }
+
+    public void setTimeout(long t) {
+        this.timeout = t;
     }
 
     public void addLink(Node node, Link link) {
@@ -93,17 +106,33 @@ public class Node {
                 parent = parents.get(parent);
                 dist-=1;
             }
-            
-            routingTable.put(node, links.get(parent));
-
-            
+            this.routingTable.put(node, links.get(parent));
         }
-
-
     }
 
-    public void sendPacket(SimplePacket packet, short destID) {
+    /**
+     * nodes just send packet along by scheduling an event
+     * @param packet
+     * @return
+     */
+    public boolean send(SimplePacket packet) {
+        short destID = packet.getDestinationID();
 
+        Node node = this.network.getNodeFromID(destID);
+        if(node == null)
+            return false;
+
+        Link linkToSend = this.routingTable.get(node);
+        if(linkToSend == null)
+            return false;
+
+        linkToSend.send(packet, this);
+        return false;
+    }
+
+    public boolean receive(SimplePacket packet) {
+        
+        return false;
     }
 
     public String toString() {

@@ -1,25 +1,18 @@
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
-import java.io.IOError;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-import java.net.DatagramPacket;
-import java.net.DatagramSocket;
-import java.net.InetAddress;
-import java.net.SocketException;
-import java.net.UnknownHostException;
-
 /**
  * TCP sender class
  */
 public class TCPsender {
-    private int port;
-    private InetAddress remoteIP;
-    private int remotePort;
+
+    private short sourceID;
+    private short destinationID;
     private String filename;
     private int mtu; // bytes
     private int sws; // number of segments
@@ -27,7 +20,7 @@ public class TCPsender {
     private int ackNo; // the acknowledgement (sequence number) of the other host
     private ConcurrentHashMap<Integer, TCPpacket> buffer;
 
-    private DatagramSocket socket = null;
+    private Node node = null;
     
     // for timeout
     private long timeout;
@@ -48,36 +41,22 @@ public class TCPsender {
 
     /**
      * Constructor 
-     * @param po port
-     * @param rIP remote IP
-     * @param rPo remote port
+     * @param sID source ID
+     * @param dID destination ID
      * @param fn input file name
      * @param m mtu in bytes
      * @param s sliding window size in segments
      */
-    TCPsender(int po, String rIP, int rPo, String fn, int m, int s) {
+    TCPsender(short sID, short dID, String fn, int m, int s) {
 
-        this.port = po;
-
-        try{
-            this.remoteIP = InetAddress.getByName(rIP);
-        }
-        catch(UnknownHostException e){
-            System.out.println("sender: no such ip");
-        }
-        
-        this.remotePort = rPo;
+        this.sourceID = sID;
+        this.destinationID = dID;
         this.filename = fn;
         this.mtu = m;
         this.sws = s;
         this.sequenceNo = 0;
         this.buffer = new ConcurrentHashMap<>();
-        try{
-            this.socket = new DatagramSocket(po);
-        }
-        catch(SocketException e) {
-            System.out.println("sender: socket error");
-        }
+
         this.timeout = 5_000_000_000L; // 5 seconds
         this.connected = false;
     }
@@ -125,14 +104,14 @@ public class TCPsender {
                     TCPsegment.setAcknowledgment(this.ackNo);
                     byte[] stream = TCPsegment.serialize();
 
-                    DatagramPacket TCPpacket = new DatagramPacket(stream, stream.length, this.remoteIP, this.remotePort);
+                    SimplePacket TCPpacket = new SimplePacket(this.sourceID, this.destinationID, stream);
                     TCPpacket toBeSent = new TCPpacket(); // a class for storing in the buffer (convenience)
                     toBeSent.message = TCPsegment;
                     toBeSent.packet = TCPpacket;
 
                     // add to buffer and send it
                     buffer.put(this.sequenceNo, toBeSent);
-                    sendPacket(TCPpacket, "packet send error");
+                    sendPacket(TCPpacket);
                     printStat(toBeSent.message, "snd");
                     this.sequenceNo += segLength;
                     segLength = in.read(segment);
@@ -185,10 +164,10 @@ public class TCPsender {
         init.setFlag('S');
         byte[] initBytes = init.serialize();
         
-        DatagramPacket initPacket = new DatagramPacket(initBytes, initBytes.length, this.remoteIP, this.remotePort);
+        SimplePacket initPacket = new SimplePacket(this.sourceID, this.destinationID, initBytes);
 
         // send segment
-        if(!sendPacket(initPacket, "sender: init 1st packet not sent"))
+        if(!sendPacket(initPacket))
             return false;
         printStat(init, "snd");
 
@@ -196,14 +175,14 @@ public class TCPsender {
         sentPacketCount ++;
 
         byte[] inBuffer = new byte[this.mtu + TCPmessage.HEADER_LENGTH];
-        DatagramPacket inPacket = new DatagramPacket(inBuffer, inBuffer.length);
+        SimplePacket inPacket = new SimplePacket((short) -1, (short) -1, inBuffer);
 
-        if(!receivePacket(inPacket, "sender: init no ack received"))
+        if(!receivePacket(inPacket))
             return false;
 
         // build segment for receiving
         TCPmessage ackRecv = new TCPmessage(0, 0, 0);
-        ackRecv = ackRecv.deserialize(inPacket.getData());
+        ackRecv = ackRecv.deserialize(inPacket.getPayload());
 
         if(!ackRecv.isSYN() || !ackRecv.isACK() || ackRecv.getAcknowledgment() != this.sequenceNo + 1) {
             System.out.println("sender: init received wrong info");
@@ -218,14 +197,8 @@ public class TCPsender {
         this.ertt = System.nanoTime() - ackRecv.getTimestamp();
         this.timeout = this.ertt * 2;
 
-        // set initila timeout
-        try {
-            this.socket.setSoTimeout((int)(this.timeout / 1000000)); // milliseconds
-        }
-        catch(SocketException e) {
-            System.out.println("sender: timeout set error");
-            return false;
-        }
+        // set initial timeout
+        this.node.setTimeout((int)(this.timeout / 1000000)); // milliseconds
 
         int inSeqNO = ackRecv.getSequenceNo();
         this.sequenceNo += 1;
@@ -234,9 +207,9 @@ public class TCPsender {
         TCPmessage init2 = new TCPmessage(this.sequenceNo, inSeqNO + 1, 0);
         init2.setFlag('A');
         byte[] initBytes2 = init2.serialize();
-        DatagramPacket initPacket2 = new DatagramPacket(initBytes2, initBytes2.length, this.remoteIP, this.remotePort);
+        SimplePacket initPacket2 = new SimplePacket(this.sourceID, this.destinationID, initBytes2);
         
-        if(!sendPacket(initPacket2, "sender: init 2nd packet not sent"))
+        if(!sendPacket(initPacket2))
             return false;
         printStat(init2, "snd");
 
@@ -248,19 +221,12 @@ public class TCPsender {
 
     /**
      * simple function taht sends packets
-     * @param packet datagrampacket to be sent
+     * @param packet SimplePacket to be sent
      * @param printMessage error message
      * @return
      */
-    public boolean sendPacket(DatagramPacket packet, String printMessage) {
-        try {
-            this.socket.send(packet);
-        }
-        catch (IOException e) {
-            System.out.println(printMessage);
-            return false;
-        }
-        return true;
+    public boolean sendPacket(SimplePacket packet) {
+        return this.node.send(packet);
     }
     
     /**
@@ -269,15 +235,8 @@ public class TCPsender {
      * @param printMessage error message
      * @return
      */
-    public boolean receivePacket(DatagramPacket packet, String printMessage) {
-        try {
-            this.socket.receive(packet);  
-        }
-        catch (IOException e) {
-            System.out.println(printMessage);
-            return false;
-        }
-        return true;
+    public boolean receivePacket(SimplePacket packet) {
+        return this.node.receive(packet);
     }
 
     /**
@@ -329,13 +288,13 @@ public class TCPsender {
         // keep track of ack count, if 3 acks of same then resend everything after
         while(this.connected) {
             byte[] inBuffer = new byte[this.mtu + TCPmessage.HEADER_LENGTH];
-            DatagramPacket inPacket = new DatagramPacket(inBuffer, inBuffer.length);
+            SimplePacket inPacket = new SimplePacket((short) -1, (short) -1, inBuffer);
 
-            if(!receivePacket(inPacket, "error receiving"))
+            if(!receivePacket(inPacket))
                 continue;
 
             TCPmessage message = new TCPmessage(0, 0, 0);
-            message = message.deserialize(inPacket.getData());
+            message = message.deserialize(inPacket.getPayload());
             printStat(message, "rcv");
 
             receivedPacketCount ++;
@@ -371,8 +330,8 @@ public class TCPsender {
                             if(data.ackCount >= 3) {
                                 data.message.setTimestamp(System.nanoTime());
                                 byte[] newStream = data.message.serialize();
-                                data.packet = new DatagramPacket(newStream, newStream.length, this.remoteIP, this.remotePort);
-                                sendPacket(data.packet, "resent packet ack > 3");
+                                data.packet = new SimplePacket(this.sourceID, this.destinationID, newStream);
+                                sendPacket(data.packet);
                                 printStat(data.message, "snd");
                                 data.ackCount = 0;
                                 sentDataSize += data.message.getLength();
@@ -398,12 +357,7 @@ public class TCPsender {
         this.ertt = (long) (0.875 * this.ertt + (1 - 0.875) * srtt);
         this.edev = (long) (0.75 * this.edev + (1 - 0.75) * sdev);
         this.timeout = this.ertt + 4 * this.edev;
-        try {
-            this.socket.setSoTimeout((int)(this.timeout / 1_000_000));
-        }
-        catch(SocketException e) {
-            System.out.println("sender: timeout set error");
-        }
+        this.node.setTimeout((int)(this.timeout / 1_000_000));
         
     }
 
@@ -414,8 +368,8 @@ public class TCPsender {
         TCPmessage finMessage = new TCPmessage(this.sequenceNo, this.ackNo, 0);
         finMessage.setFlag('F');
         byte[] finData = finMessage.serialize();
-        DatagramPacket finPacket = new DatagramPacket(finData, finData.length, this.remoteIP, this.remotePort);
-        sendPacket(finPacket, "fin message send error");
+        SimplePacket finPacket = new SimplePacket(this.sourceID, this.destinationID, finData);
+        sendPacket(finPacket);
         printStat(finMessage, "snd");
         this.sequenceNo++;
         sentDataSize += finMessage.getLength();
@@ -429,8 +383,8 @@ public class TCPsender {
         TCPmessage finMessage2 = new TCPmessage(this.sequenceNo, this.ackNo + 1, 0);
         finMessage2.setFlag('A');
         byte[] finData = finMessage2.serialize();
-        DatagramPacket finPacket = new DatagramPacket(finData, finData.length, this.remoteIP, this.remotePort);
-        sendPacket(finPacket, "fin message send error");
+        SimplePacket finPacket = new SimplePacket(this.sourceID, this.destinationID, finData);
+        sendPacket(finPacket);
         printStat(finMessage2, "snd");
         this.connected = false;
         sentDataSize += finMessage2.getLength();
@@ -451,8 +405,8 @@ public class TCPsender {
                         // update timestamp and resend packet
                         current.message.setTimestamp(System.nanoTime());
                         byte[] newStream = current.message.serialize();
-                        current.packet = new DatagramPacket(newStream, newStream.length, this.remoteIP, this.remotePort);
-                        sendPacket(current.packet, "resent packet because timeout");
+                        current.packet = new SimplePacket(this.sourceID, this.destinationID, newStream);
+                        sendPacket(current.packet);
                         printStat(current.message, "snd");
                         sentDataSize += current.message.getLength();
                         sentPacketCount ++;
@@ -480,7 +434,7 @@ public class TCPsender {
  * a class for added to the buffer, more convenient, so don't have tp serialize and deserialize
  */
 class TCPpacket {
-    DatagramPacket packet;
+    SimplePacket packet;
     TCPmessage message;
     int ackCount = 0; // counts if matches the acknowledgment in header, if >= 3 retransmit
 }

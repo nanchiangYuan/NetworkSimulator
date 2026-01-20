@@ -1,75 +1,53 @@
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.util.ArrayList;
-import java.util.LinkedList;
-import java.util.Queue;
 import java.util.Scanner;
 
-public class NetworkEmulator {
+public class SimpleNetwork {
+    private ArrayList<Node> hosts;
+    private ArrayList<Node> routers;
+    private ArrayList<Link> links;
+    private Scheduler scheduler;
 
-    private static ArrayList<Node> hosts;
-    private static ArrayList<Node> routers;
-    private static ArrayList<Link> links;
+    SimpleNetwork(String filename, Scheduler scheduler) {
+        setUpTopology(filename);
+        this.scheduler = scheduler;
+    }
 
-    private static boolean topoSet = false;
-
-    private static final int DROP_RATE_BASE_DEFAULT = 0;
-    private static final int BANDWIDTH_BASE_DEFAULT = 0;
-    private static final int LATENCY_BASE_DEFAULT = 0;
-
-    public static void main(String args[]) {
-
-        Scanner in = new Scanner(System.in);
-
-        while(true) {
-            System.out.print("NetworkEmulator> ");
-            String input = in.nextLine();
-            String[] inputSplit = input.split("\\s+");
-
-            if(inputSplit[0].equals("run")) {
-                if(!topoSet)
-                    System.out.println("Network not set.");
-                else if(inputSplit.length == 1) {
-                    run();
-                }
-                else {
-                    // parse run command
-                }
-            }
-
-            else if(inputSplit[0].equals("config")) {
-                // print out network config
-            }
-
-            else if(inputSplit[0].equals("setup")) {
-                if(inputSplit.length == 2) {
-                    setUpTopology(inputSplit[1]);
-                }
-                else {
-                    System.out.println("invalid setup command");
-                }
-
-            }
-
-            else if(inputSplit[0].equals("exit"))
+    public ArrayList<Node> getHosts() {
+        return this.hosts;
+    }
+    public ArrayList<Node> getRouters() {
+        return this.routers;
+    }
+    public ArrayList<Link> getLinks() {
+        return this.links;
+    }
+    public Node getNodeFromID(short ID) {
+        Node node = null;
+        for(Node curr: hosts) {
+            if(curr.getID() == ID) {
+                node = curr;
                 break;
-
-            else {
-                System.out.println("Unknown command. ");
-                System.out.println("This is a list of commands: ");
-                System.out.println("run: ...");
             }
 
         }
-        
-        in.close();
+        if(node == null) {
+            for(Node curr: routers) {
+                if(curr.getID() == ID) {
+                    node = curr;
+                    break;
+                }
+            }
+        }
+        return node;
     }
 
     /**
      * sets up the topology of hosts and routers
      * @param mode 0 for default, linear topology with 2 hosts and 1 router, 1 for custom topo from file
      */
-    private static void setUpTopology(String filename) {
+    private void setUpTopology(String filename) {
 
         // clear out old info first
         hosts = new ArrayList<>();
@@ -77,36 +55,28 @@ public class NetworkEmulator {
         links = new ArrayList<>();
 
         File topoFile = new File(filename);
-        boolean error = false;
 
         try (Scanner readFile = new Scanner(topoFile)){
             while(readFile.hasNextLine()) {
                 String line = readFile.nextLine();
                 String[] split = line.split("\\s+");
-                if(!setUpHelper(split)) {
-                    error = true;
+                if(!setUpHelper(split)) 
                     break;
-                }
             }
         } catch (FileNotFoundException E) {
             System.out.println("File does not exit");
             return;
         } 
 
-        if(!error)
-            topoSet = true;
-
         buildRoutingTables();
-        // printTopo();
-
     }
 
-    private static boolean setUpHelper(String[] features) {
+    private boolean setUpHelper(String[] features) {
         if(features[0].equals("host")) {
-            hosts.add(new Node(features[1], Short.valueOf(features[2])));
+            hosts.add(new Node(features[1], Short.valueOf(features[2]), this, this.scheduler));
         }
         else if(features[0].equals("router")) {
-            routers.add(new Node(features[1], Short.valueOf(features[2])));
+            routers.add(new Node(features[1], Short.valueOf(features[2]), this, this.scheduler));
         }
         else if(features[0].equals("link")) {
 
@@ -143,7 +113,7 @@ public class NetworkEmulator {
                 System.out.println("File format error: not numbers");
                 return false;
             }
-            Link newLink = new Link(n1, n2, queueSize, bandwidth, latency);
+            Link newLink = new Link(n1, n2, queueSize, bandwidth, latency, this.scheduler);
             links.add(newLink);
             n1.addLink(n2, newLink);
             n2.addLink(n1, newLink);
@@ -157,7 +127,7 @@ public class NetworkEmulator {
         return true;
     }
  
-    private static void printTopo() {
+    public void printTopo() {
 
         System.out.println("Hosts: ");
         for (Node node : hosts) {
@@ -177,7 +147,7 @@ public class NetworkEmulator {
     /**
      * Use BFS to build routing tables for every node, starts at the first host
      */
-    private static void buildRoutingTables() {
+    private void buildRoutingTables() {
         Node[] nodeList = new Node[hosts.size() + routers.size()];
         // System.out.println("hosts: ");
         for(int i = 0; i < hosts.size(); i++) {
@@ -201,20 +171,4 @@ public class NetworkEmulator {
 
 
     }
-
-    private static void run() {
-
-    }
-    
 }
-
-/**
- * commands:
- * run bandwidth
- * run queueSize
- * run latency
- * setup [topoFile]: 
- *      topoFile: file for topology (for now make one for dumbbell topo) and the parameters for the links
- * config: print configurations for network (topo and links)
- * exit: exits program
- */

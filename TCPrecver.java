@@ -14,19 +14,15 @@ import javax.crypto.spec.IvParameterSpec;
  * Class for receiver
  */
 public class TCPrecver{
-    private int port;
     private String filename;
     private int mtu;
     private int sws;
     private ConcurrentHashMap<Integer, TCPpacketR> buffer;
     private int sequenceNo;
 
-    private InetAddress senderIP;
-    private int senderPort = 0;
+    private short senderID;
 
     private int expectedSeq; // the next expected byte
-
-    private DatagramSocket socket;
 
     // final stats
     private int invalidChecksumCount = 0;
@@ -47,18 +43,12 @@ public class TCPrecver{
      * @param mtu
      * @param sws
      */
-    TCPrecver(int port, String filename, int mtu, int sws) {
-        this.port = port;
+    TCPrecver(short sourceID, String filename, int mtu, int sws) {
+
+        this.senderID = sourceID;
         this.filename = filename;
         this.mtu = mtu;
         this.sws = sws;
-        try{
-            this.socket = new DatagramSocket(port);
-        } 
-        catch (SocketException e) {
-            System.out.println("receiver socket creation failed");
-            return;
-        }
         
         this.buffer = new ConcurrentHashMap<>();
         this.sequenceNo = 0;
@@ -71,7 +61,7 @@ public class TCPrecver{
     public void run() {
 
         byte[] received = new byte[this.mtu + TCPmessage.HEADER_LENGTH];
-        DatagramPacket receivedPacket = null;
+        SimplePacket receivedPacket = null;
         FileOutputStream output = null;
 
         try{
@@ -88,15 +78,11 @@ public class TCPrecver{
         while(true) {
 
             // receive a packet
-            receivedPacket = new DatagramPacket(received, received.length);
-            receivePacket(receivedPacket, "reciever: packet not received");
-
-            // get sender IP and port
-            this.senderIP = receivedPacket.getAddress();
-            this.senderPort = receivedPacket.getPort();
+            receivedPacket = new SimplePacket(this.senderID, (short) -1, received);
+            receivePacket(receivedPacket);
 
             TCPmessage receivedSegment = new TCPmessage(0, 0, 0);
-            receivedSegment = receivedSegment.deserialize(receivedPacket.getData());
+            receivedSegment = receivedSegment.deserialize(receivedPacket.getPayload());
 
             receivedPacketCount++;
             receivedDataSize += receivedSegment.getLength();
@@ -391,6 +377,6 @@ public class TCPrecver{
  * class for putting inside the buffer, more convenient
  */
 class TCPpacketR {
-    DatagramPacket packet;
+    SimplePacket packet;
     TCPmessage message;
 }
