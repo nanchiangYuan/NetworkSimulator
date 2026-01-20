@@ -3,19 +3,24 @@ import java.util.concurrent.LinkedBlockingQueue;
 public class Link {
     private int queueSize;
     private int bandwidth; // in bits
-    private int latency;
-    private LinkedBlockingQueue<SimplePacket> buffer;
+    private int latency; // in ms
+    private int bufferSize; // in KB
+    private double nextAvailableTime;
 
     private Scheduler scheduler;
     private Node[] connections;
 
+    private double fullBufferTime;
+
     Link(Node n1, Node n2, int queueSize, int bandwidth, int latency, Scheduler scheduler) {
         this.queueSize = queueSize;
-        this.bandwidth = bandwidth;
+        this.bandwidth = bandwidth;     // in Mbps
         this.latency = latency;
-        this.buffer = new LinkedBlockingQueue<>(queueSize);
+        this.bufferSize = queueSize;
+        this.nextAvailableTime = 0.0;
         this.connections = new Node[]{n1, n2};
         this.scheduler = scheduler;
+        this.fullBufferTime = (this.bufferSize * 8.0) / (this.bandwidth * 1000000.0) * 1000.0; 
     }
 
     public void setConnections(Node n1, Node n2) {
@@ -55,9 +60,13 @@ public class Link {
         return "link: " + this.connections[0].getName() + ", " + this.connections[1].getName();
     }
 
+    /**
+     * 
+     * @param packet
+     * @param source
+     * @return false if sending caused errors, true if no error (dropping a packet is considered normal behavior)
+     */
     public boolean send(SimplePacket packet, Node source) {
-
-        
         Node dest;
         if(source.equals(this.connections[0]))
             dest = this.connections[1];
@@ -66,11 +75,24 @@ public class Link {
         if(dest == null)
             return false;
 
+        // calculate delay caused by bandwidth, in ms
+        // ms = (Bytes * 8) / (Mb / s * 1,000,000) * 1,000
         double currentTime = this.scheduler.getCurrentTime();
-        double arrivalTime = currentTime ++;
-        
+        double transmitTime = (packet.getSize() * 8.0) / (this.bandwidth * 1000000.0) * 1000.0; // s to ms
 
-        this.scheduler.getQueue().add(new Event(packet, Event.EventType.ARRIVE, arrivalTime));
+        // check whether the buffer is full 
+        double currentBufferTime = this.fullBufferTime + currentTime;
+
+        double departTime = Math.max(this.nextAvailableTime, currentTime);
+        double checkAvailableTime = departTime + transmitTime;
+
+        if(checkAvailableTime > currentBufferTime)
+            return true;
+        
+        this.nextAvailableTime = checkAvailableTime;
+        double arriveTime = this.nextAvailableTime + this.latency;
+
+        this.scheduler.schedule(new Event(packet, Event.EventType.ARRIVE, arriveTime));
         return false;
     }
 
