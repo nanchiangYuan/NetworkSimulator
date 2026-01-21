@@ -44,4 +44,9 @@ public class SimplePacket {
         this.length = (short) (HEADER_LENGTH + this.payload.length);
     }
 
+    // in bytes
+    public int getSize() {
+        return HEADER_LENGTH + this.payload.length;
+    }
+
 }

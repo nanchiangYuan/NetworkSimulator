@@ -33,6 +33,16 @@ public class Event implements Comparable<Event>{
         return this.destination;
     }
 
+    public void execute() {
+        if(this.type == EventType.ARRIVE) {
+            // if arrival node is dest node, do TCP receiver logic
+            // else pass down packet by doing node.send
+        }
+        else if(this.type == EventType.TIMEOUT_CHECK) {
+            
+        }
+    }
+
     @Override
     public int compareTo(Event other) {
         return Double.compare(this.time, other.getTime());

@@ -1,16 +1,26 @@
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.IOException;
 import java.util.Objects;
+import java.util.Random;
 
 public class test {
     public static void main(String[] args) {
-        
-        Event a = new Event(null, null, 0);
-        Event b = new Event(null, null, 1);
-        Scheduler sched = new Scheduler();
-        sched.addToQueue(b);
-        sched.addToQueue(a);
 
-        System.out.println(sched.popFromQueue());
-        System.out.println(sched.popFromQueue());
+        try{
+            FileOutputStream f = new FileOutputStream("hi.txt");
+            byte[] b = new byte[1024];
+            Random randomgen = new Random();
+            randomgen.nextBytes(b);
+            f.write(b);
+            f.close();
+        } catch(FileNotFoundException e) {
+            System.out.println("uh oh");
+        } catch(IOException e) {
+            System.out.println("huh");
+        }
+        
+
 
     }
 

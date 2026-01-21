@@ -23,11 +23,13 @@ public class Scheduler {
         this.currentTime = time;
     }
 
-    public void addToQueue(Event e) {
+    public void schedule(Event e) {
         this.global_queue.add(e);
     }
 
-    public Event popFromQueue() {
-        return this.global_queue.poll();
+    public Event runSchedule() {
+        Event tobeRun = this.global_queue.poll();
+        this.currentTime = tobeRun.getTime();
+        return tobeRun;
     }
 }

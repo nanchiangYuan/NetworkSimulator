@@ -171,6 +171,5 @@ public class SimpleNetwork {
             router.printTable();
         }
 
-
     }
 }

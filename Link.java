@@ -5,6 +5,9 @@ public class Link {
     private int bufferSize; // in KB
     private double nextAvailableTime;
 
+    private int id;     // for debugging
+    private static int idPool = 0;
+
     private Scheduler scheduler;
     private Node connection;
 
@@ -18,7 +21,9 @@ public class Link {
         this.nextAvailableTime = 0.0;
         this.connection = n;
         this.scheduler = scheduler;
-        this.fullBufferTime = (this.bufferSize * 8.0) / (this.bandwidth * 1000000.0) * 1000.0; 
+        this.fullBufferTime = (this.bufferSize * 8.0) / (this.bandwidth * 1000000.0) * 1000.0;
+        this.id = idPool;
+        idPool++; 
     }
 
     public void setConnections(Node n) {
@@ -54,7 +59,7 @@ public class Link {
     }
 
     public String toString() {
-        return "link: to " + this.connection.getName();
+        return "link " + this.id + " : to " + this.connection.getName();
     }
 
     /**
