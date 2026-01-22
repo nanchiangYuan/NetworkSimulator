@@ -33,14 +33,20 @@ public class Event implements Comparable<Event>{
         return this.destination;
     }
 
-    public void execute() {
+    /**
+     * 
+     * @return event to add onto queue (timeout mostly)
+     */
+    public Event execute() {
         if(this.type == EventType.ARRIVE) {
-            // if arrival node is dest node, do TCP receiver logic
+            // if arrival node is dest node, do TCP receiver logic (remove infinite loop)
+            // and add timeout check event onto queue
             // else pass down packet by doing node.send
         }
         else if(this.type == EventType.TIMEOUT_CHECK) {
-            
+
         }
+        return null;
     }
 
     @Override

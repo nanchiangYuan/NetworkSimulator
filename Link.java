@@ -9,25 +9,28 @@ public class Link {
     private static int idPool = 0;
 
     private Scheduler scheduler;
-    private Node connection;
+    private Node fromNode;
+    private Node toNode;
 
     private double fullBufferTime;
 
-    Link(Node n, int queueSize, int bandwidth, int latency, Scheduler scheduler) {
+    Link(Node n1, Node n2, int queueSize, int bandwidth, int latency, Scheduler scheduler) {
         this.queueSize = queueSize;
         this.bandwidth = bandwidth;     // in Mbps
         this.latency = latency;
         this.bufferSize = queueSize;
         this.nextAvailableTime = 0.0;
-        this.connection = n;
+        this.fromNode = n1;
+        this.toNode = n2;
         this.scheduler = scheduler;
         this.fullBufferTime = (this.bufferSize * 8.0) / (this.bandwidth * 1000000.0) * 1000.0;
         this.id = idPool;
         idPool++; 
     }
 
-    public void setConnections(Node n) {
-        this.connection = n;
+    public void setConnections(Node n1, Node n2) {
+        this.fromNode = n1;
+        this.toNode = n2;
     }
 
     public void setQueueSize(int size) {
@@ -42,8 +45,12 @@ public class Link {
         this.latency = latency;
     }
 
-    public Node getConnection() {
-        return this.connection;
+    public Node getStartNode() {
+        return this.fromNode;
+    }
+
+    public Node getEndNode() {
+        return this.toNode;
     }
 
     public int getQueueSize() {
@@ -59,7 +66,7 @@ public class Link {
     }
 
     public String toString() {
-        return "link " + this.id + " : to " + this.connection.getName();
+        return "link " + this.id + " : from " + this.fromNode.getName() + ", to " + this.toNode.getName();
     }
 
     /**
@@ -88,7 +95,7 @@ public class Link {
         this.nextAvailableTime = checkAvailableTime;
         double arriveTime = this.nextAvailableTime + this.latency;
 
-        this.scheduler.schedule(new Event(packet, Event.EventType.ARRIVE, arriveTime, this.connection));
+        this.scheduler.schedule(new Event(packet, Event.EventType.ARRIVE, arriveTime, this.toNode));
         return false;
     }
 

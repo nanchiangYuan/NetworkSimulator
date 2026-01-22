@@ -7,18 +7,8 @@ import java.util.Random;
 public class test {
     public static void main(String[] args) {
 
-        try{
-            FileOutputStream f = new FileOutputStream("hi.txt");
-            byte[] b = new byte[1024];
-            Random randomgen = new Random();
-            randomgen.nextBytes(b);
-            f.write(b);
-            f.close();
-        } catch(FileNotFoundException e) {
-            System.out.println("uh oh");
-        } catch(IOException e) {
-            System.out.println("huh");
-        }
+        Link[] targetLink = new Link[2];
+        System.out.println(targetLink[0]);
         
 
 

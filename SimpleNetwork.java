@@ -113,8 +113,8 @@ public class SimpleNetwork {
                 System.out.println("File format error: not numbers");
                 return false;
             }
-            Link newLink1 = new Link(n1, queueSize, bandwidth, latency, this.scheduler);
-            Link newLink2 = new Link(n2, queueSize, bandwidth, latency, this.scheduler);
+            Link newLink1 = new Link(n1, n2, queueSize, bandwidth, latency, this.scheduler);
+            Link newLink2 = new Link(n2, n1, queueSize, bandwidth, latency, this.scheduler);
             links.add(newLink1);
             links.add(newLink2);
             n1.addLink(n2, newLink2);

@@ -19,6 +19,7 @@ public class TCPsender {
     private int sequenceNo; // the sequence number sender puts on its packets
     private int ackNo; // the acknowledgement (sequence number) of the other host
     private ConcurrentHashMap<Integer, TCPpacket> buffer;
+    private Scheduler scheduler;
 
     private Node node = null;
     
@@ -47,7 +48,7 @@ public class TCPsender {
      * @param m mtu in bytes
      * @param s sliding window size in segments
      */
-    TCPsender(short sID, short dID, String fn, int m, int s) {
+    TCPsender(short sID, short dID, String fn, int m, int s, Scheduler sched) {
 
         this.sourceID = sID;
         this.destinationID = dID;
@@ -56,9 +57,11 @@ public class TCPsender {
         this.sws = s;
         this.sequenceNo = 0;
         this.buffer = new ConcurrentHashMap<>();
+        this.scheduler = sched;
 
         this.timeout = 5_000_000_000L; // 5 seconds
         this.connected = false;
+        
     }
 
     /**

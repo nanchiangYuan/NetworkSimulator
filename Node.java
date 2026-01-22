@@ -126,8 +126,8 @@ public class Node {
         if(linkToSend == null)
             return false;
 
-        linkToSend.send(packet);
-        return false;
+        
+        return linkToSend.send(packet);
     }
 
     public boolean receive(SimplePacket packet) {
