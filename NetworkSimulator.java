@@ -285,24 +285,31 @@ public class NetworkSimulator {
              */
 
             sender.initConnection();    // only sends first handshake
+
             while(!scheduler.getQueue().isEmpty()) {
-                Event currEvent = scheduler.runSchedule();
+                
+                Event currEvent = scheduler.run();
+
                 if(currEvent.getType() == Event.EventType.ARRIVE) {
+                    // depending on whether the packet arrives at the source or destination, TCP sender or receiver is called
                     if(currEvent.getDestination().getID() == currEvent.getPacket().getDestinationID()) {
-                        receiver.receivePacket(null, outputFilename);
+                        receiver.receive(currEvent.getPacket());
                     }
+                    else if(currEvent.getDestination().getID() == currEvent.getPacket().getSourceID()) {
+                        sender.receive(currEvent.getPacket());
+                    }
+                    // otherwise, just send packet down to the next node
                     else {
-                        // send packet down to the next node
+                        currEvent.getDestination().send(currEvent.getPacket());
                     }
                 }
+
                 if(currEvent.getType() == Event.EventType.TIMEOUT_CHECK) {
+                    sender.checkTimeout(currEvent.getPacket());
                     // get a data structure from sender that records if a packet received an ack
                     // if received, just continue, if not, send packet again
                 }
-
             }
-
-
             configureLinks(testConfig.links, testConfig.stepSize, testNo);
 
         }
