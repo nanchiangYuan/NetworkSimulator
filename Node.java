@@ -115,19 +115,21 @@ public class Node {
      * @param packet
      * @return
      */
-    public boolean send(SimplePacket packet) {
+    public void send(SimplePacket packet) {
         short destID = packet.getDestinationID();
 
         Node node = this.network.getNodeFromID(destID);
-        if(node == null)
-            return false;
+        if(node == null) {
+            System.out.println("node doesn't exist");
+            return;
+        }
 
         Link linkToSend = this.routingTable.get(node);
-        if(linkToSend == null)
-            return false;
-
-        
-        return linkToSend.send(packet);
+        if(linkToSend == null) {
+            System.out.println("link doesn't exist");
+            return;
+        }
+        linkToSend.send(packet);
     }
 
     public boolean receive(SimplePacket packet) {

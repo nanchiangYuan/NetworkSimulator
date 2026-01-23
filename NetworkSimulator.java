@@ -297,6 +297,7 @@ public class NetworkSimulator {
                     }
                     else if(currEvent.getDestination().getID() == currEvent.getPacket().getSourceID()) {
                         sender.receive(currEvent.getPacket());
+                        // if ack for threeway handshake is received, start sending packets, done in TCPsender
                     }
                     // otherwise, just send packet down to the next node
                     else {
@@ -310,6 +311,7 @@ public class NetworkSimulator {
                     // if received, just continue, if not, send packet again
                 }
             }
+
             configureLinks(testConfig.links, testConfig.stepSize, testNo);
 
         }
@@ -397,4 +399,5 @@ public class NetworkSimulator {
  * 3. add congestion control
  * 4. go through tcpsender and recver to make sure it's adapted to the current simulator
  * 5. make print statements to show the test results
+ * 6. add states if time allows
  */

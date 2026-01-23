@@ -1,8 +1,12 @@
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
+import java.io.IO;
 import java.io.IOException;
+import java.lang.annotation.ElementType;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -15,18 +19,24 @@ public class TCPsender {
     private short destinationID;
     private String filename;
     private int mtu; // bytes
-    private int sws; // number of segments
+    private int cwnd; // congestion window
     private int sequenceNo; // the sequence number sender puts on its packets
     private int ackNo; // the acknowledgement (sequence number) of the other host
-    private ConcurrentHashMap<Integer, TCPpacket> buffer;
     private Scheduler scheduler;
+
+    private ArrayList<SimplePacket> buffer;
+    private int lastAck;
+    private int lastSent;
+
+    private HashMap<Integer, Boolean> ackList;
+    private State state;
 
     private Node node = null;
     
     // for timeout
-    private long timeout;
-    private long ertt;
-    private long edev = 0;
+    private double timeout;
+    private double ertt;        // estimated rtt
+    private double edev = 0.0;      // estimated deviation
 
     // for final stats
     private int sentDataSize = 0;
@@ -54,14 +64,172 @@ public class TCPsender {
         this.destinationID = dID;
         this.filename = fn;
         this.mtu = m;
-        this.sws = s;
+        this.cwnd = 1;
         this.sequenceNo = 0;
-        this.buffer = new ConcurrentHashMap<>();
+        this.buffer = new ArrayList<>();
         this.scheduler = sched;
+        this.ackList = new HashMap<>();
+        this.state = State.CLOSED;
 
-        this.timeout = 5_000_000_000L; // 5 seconds
+        this.timeout = 5000.0; // 5 seconds
         this.connected = false;
+
+
         
+    }
+
+    /**
+     * Sends the first packet to initialize threeway handshake
+     * @return succeed or not
+     */
+    public boolean initConnection() {
+
+        System.out.println("initializing connection");
+
+        if(state != State.CLOSED)
+            return false;
+
+        // build segment for sending
+        TCPmessage init = new TCPmessage(sequenceNo, 0, 0, scheduler.getCurrentTime());
+        init.setFlag('S');
+        byte[] initBytes = init.serialize();
+        
+        SimplePacket initPacket = new SimplePacket(sourceID, destinationID, initBytes);
+
+        // send segment
+        if(!node.send(initPacket))
+            return false;
+        
+        // take a note of the packet, false for haven't got ack yet
+        ackList.put(init.getSequenceNo(), false);
+
+        sentDataSize += init.getLength();
+        sentPacketCount ++;
+
+        state = State.SYN_SENT;
+        System.out.println("after initConnection(): state: " + state);
+        return true;
+    }
+    
+    /**
+     * Runs receive logic depending on which state the node is currently in. 
+     * @param packet the packet received by node
+     * @return
+     */
+    public boolean receive(SimplePacket packet) {
+
+        // check state, do different things based on state
+        if(state == State.SYN_SENT) {
+
+            // build segment for getting payload of packet
+            TCPmessage ackRecv = new TCPmessage(0, 0, 0, 0);
+            ackRecv = ackRecv.deserialize(packet.getPayload());
+
+            if(!ackRecv.isSYN() || !ackRecv.isACK() || ackRecv.getAcknowledgment() != sequenceNo + 1) {
+                System.out.println("sender: init received wrong info");
+                return false;
+            }
+
+            ackNo = ackRecv.getAcknowledgment();
+            receivedPacketCount ++;
+            receivedDataSize += ackRecv.getLength();
+            
+            // calculate first value for timeout
+            ertt = scheduler.getCurrentTime() - ackRecv.getTimestamp();
+            timeout = ertt * 2.0;
+
+            // set initial timeout
+            // this.node.setTimeout((int)(this.timeout / 1000000)); // milliseconds
+
+            int inSeqNO = ackRecv.getSequenceNo();
+            sequenceNo += 1;
+            
+            // third packet 
+            TCPmessage init2 = new TCPmessage(sequenceNo, inSeqNO + 1, 0, scheduler.getCurrentTime());
+            init2.setFlag('A');
+            byte[] initBytes2 = init2.serialize();
+            SimplePacket initPacket2 = new SimplePacket(sourceID, destinationID, initBytes2);
+            
+            if(!node.send(initPacket2))
+                return false;
+
+            sentDataSize += init2.getLength();
+            sentPacketCount ++;
+
+            state = State.ESTABLISHED;
+
+            return true;
+        }
+
+        if(state == State.ESTABLISHED) {
+
+        }
+
+
+
+
+        return false;
+
+    }
+
+    /**
+     * recalculate congestion window upon receiving an ack
+     */
+    private void calculateCongestionWindow() {
+        
+    }
+    private void dataIntoBuffer() {
+        FileInputStream fileIn = null;
+        try{
+            File file = new File(filename);
+            fileIn = new FileInputStream(file);
+            byte[] segment = new byte[mtu - TCPmessage.HEADER_LENGTH];
+            int segLength = fileIn.read(segment);
+            while(segLength != -1) {
+
+                // build the TCP segment to be put in buffer
+                byte[] payload = Arrays.copyOf(segment, segLength);
+                TCPmessage TCPsegment = new TCPmessage(sequenceNo, 0, segLength, scheduler.getCurrentTime());
+                TCPsegment.setPayload(payload);
+                TCPsegment.setFlag('A');
+                TCPsegment.setAcknowledgment(ackNo);
+                byte[] stream = TCPsegment.serialize();
+
+                SimplePacket TCPpacket = new SimplePacket(sourceID, destinationID, stream);
+                TCPpacket toBeSent = new TCPpacket(); // a class for storing in the buffer (convenience)
+                toBeSent.message = TCPsegment;
+                toBeSent.packet = TCPpacket;
+
+                // add to buffer and send it
+                buffer.put(sequenceNo, toBeSent);
+                sendPacket(TCPpacket);
+                printStat(toBeSent.message, "snd");
+                this.sequenceNo += segLength;
+                segLength = in.read(segment);
+                sentDataSize += TCPsegment.getLength();
+                    sentPacketCount ++;
+            }
+        } catch (FileNotFoundException e) {
+            System.out.println("File not found");
+        } catch (IOException e) {
+            System.out.println("Error when reading file");
+        }
+    }
+    private boolean sendData() {
+        if(state != State.ESTABLISHED)
+            return false;
+
+        // create one segment of the file
+        byte[] segment = new byte[mtu - TCPmessage.HEADER_LENGTH];
+        int segLength;
+        try {
+            segLength = fileIn.read(segment);
+
+        } catch (IOException e) {
+            System.out.println("Error when reading file");
+        }
+
+        if(buffer.size() < cwnd)
     }
 
     /**
@@ -156,86 +324,10 @@ public class TCPsender {
         }
 
     }
-
-    /**
-     * Three way hand shake for initializing connection
-     * @return succeed or not
-     */
-    public boolean initConnection() {
-        // build segment for sending
-        TCPmessage init = new TCPmessage(this.sequenceNo, 0, 0);
-        init.setFlag('S');
-        byte[] initBytes = init.serialize();
-        
-        SimplePacket initPacket = new SimplePacket(this.sourceID, this.destinationID, initBytes);
-
-        // send segment
-        if(!sendPacket(initPacket))
-            return false;
-        printStat(init, "snd");
-
-        sentDataSize += init.getLength();
-        sentPacketCount ++;
-
-        byte[] inBuffer = new byte[this.mtu + TCPmessage.HEADER_LENGTH];
-        SimplePacket inPacket = new SimplePacket((short) -1, (short) -1, inBuffer);
-
-        if(!receivePacket(inPacket))
-            return false;
-
-        // build segment for receiving
-        TCPmessage ackRecv = new TCPmessage(0, 0, 0);
-        ackRecv = ackRecv.deserialize(inPacket.getPayload());
-
-        if(!ackRecv.isSYN() || !ackRecv.isACK() || ackRecv.getAcknowledgment() != this.sequenceNo + 1) {
-            System.out.println("sender: init received wrong info");
-            return false;
-        }
-        this.ackNo = ackRecv.getAcknowledgment();
-        printStat(ackRecv, "rcv");
-        receivedPacketCount ++;
-        receivedDataSize += ackRecv.getLength();
-
-        // calculate first value for timeout
-        this.ertt = System.nanoTime() - ackRecv.getTimestamp();
-        this.timeout = this.ertt * 2;
-
-        // set initial timeout
-        this.node.setTimeout((int)(this.timeout / 1000000)); // milliseconds
-
-        int inSeqNO = ackRecv.getSequenceNo();
-        this.sequenceNo += 1;
-
-        // third packet 
-        TCPmessage init2 = new TCPmessage(this.sequenceNo, inSeqNO + 1, 0);
-        init2.setFlag('A');
-        byte[] initBytes2 = init2.serialize();
-        SimplePacket initPacket2 = new SimplePacket(this.sourceID, this.destinationID, initBytes2);
-        
-        if(!sendPacket(initPacket2))
-            return false;
-        printStat(init2, "snd");
-
-        sentDataSize += init.getLength();
-        sentPacketCount ++;
-
-        return true;
-    }
-
-    /**
-     * simple function taht sends packets
-     * @param packet SimplePacket to be sent
-     * @param printMessage error message
-     * @return
-     */
-    public boolean sendPacket(SimplePacket packet) {
-        return this.node.send(packet);
-    }
     
     /**
      * simple function for receiving packets
      * @param packet datagrampacket to be received
-     * @param printMessage error message
      * @return
      */
     public boolean receivePacket(SimplePacket packet) {
@@ -434,7 +526,7 @@ public class TCPsender {
 }
 
 /**
- * a class for added to the buffer, more convenient, so don't have tp serialize and deserialize
+ * a class for added to the buffer, more convenient, so don't have tcp serialize and deserialize
  */
 class TCPpacket {
     SimplePacket packet;

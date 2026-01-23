@@ -6,7 +6,7 @@ import java.nio.ByteBuffer;
 public class TCPmessage{
     private int sequenceNo;
     private int acknowledgment;
-    private long timestamp;
+    private double timestamp;
     private int length;
     private int flags;
     private short checksum;
@@ -18,10 +18,10 @@ public class TCPmessage{
     private boolean Fflag;
     private boolean Aflag;
 
-    TCPmessage(int sequenceNo, int acknowledgment, int length) {
+    TCPmessage(int sequenceNo, int acknowledgment, int length, double currentTime) {
         this.sequenceNo = sequenceNo;
         this.acknowledgment = acknowledgment;
-        this.timestamp = System.nanoTime();
+        this.timestamp = currentTime;
         this.length = length;
         this.flags = 0;
         this.checksum = 0;
@@ -40,7 +40,7 @@ public class TCPmessage{
         return this.acknowledgment;
     }
 
-    public long getTimestamp() {
+    public double getTimestamp() {
         return this.timestamp;
     }
 
@@ -98,7 +98,7 @@ public class TCPmessage{
     public void setAcknowledgment(int ack) {
         this.acknowledgment = ack;
     }
-    public void setTimestamp(long time) {
+    public void setTimestamp(double time) {
         this.timestamp = time;
     }
     public void setPayload(byte[] data) {
@@ -123,7 +123,7 @@ public class TCPmessage{
 
         bb.putInt(this.sequenceNo);
         bb.putInt(this.acknowledgment);
-        bb.putLong(this.timestamp);
+        bb.putDouble(this.timestamp);
 
         int lengthWithFlags = (this.length << 3) | this.flags;
 
@@ -163,7 +163,7 @@ public class TCPmessage{
         ByteBuffer bb = ByteBuffer.wrap(data);
         this.sequenceNo = bb.getInt();
         this.acknowledgment = bb.getInt();
-        this.timestamp = bb.getLong();
+        this.timestamp = bb.getDouble();
         int lengthWithFlags = bb.getInt();
         this.length = lengthWithFlags >> 3;
         this.flags = lengthWithFlags & 7;

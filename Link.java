@@ -73,9 +73,9 @@ public class Link {
      * 
      * @param packet
      * @param source
-     * @return false if sending caused errors, true if no error (dropping a packet is considered normal behavior)
+     * @return false if dropping a packet, true if no error 
      */
-    public boolean send(SimplePacket packet) {
+    public void send(SimplePacket packet) {
 
         // calculate delay caused by bandwidth, in ms
         // ms = (Bytes * 8) / (Mb / s * 1,000,000) * 1,000
@@ -90,13 +90,13 @@ public class Link {
         // check whether the buffer is full by seeing if the estimated end time to go through the link
         // is further away from the end time of processing everything in the buffer
         if(checkAvailableTime > currentBufferTime)
-            return true;    // drop packet
+            return;    // drop packet
 
         this.nextAvailableTime = checkAvailableTime;
         double arriveTime = this.nextAvailableTime + this.latency;
 
         this.scheduler.schedule(new Event(packet, Event.EventType.ARRIVE, arriveTime, this.toNode));
-        return false;
+
     }
 
     public boolean receive(SimplePacket packet) {
