@@ -3,8 +3,6 @@ import java.io.IOException;
 import java.util.Random;
 import java.util.Scanner;
 
-import Event.EventType;
-
 public class NetworkSimulator {
 
     private static SimpleNetwork network;
@@ -28,7 +26,7 @@ public class NetworkSimulator {
 
     private static Scheduler scheduler;
 
-    record TestConfig(short sourceID, short destID, Link[] links, int filesize, String filename, int test, int stepSize, int testCount, int mtu, int sws) {}
+    record TestConfig(short sourceID, short destID, Link[] links, int filesize, String filename, int test, int stepSize, int testCount, int mtu, int sws, boolean verbose) {}
 
     public static void main(String args[]) {
 
@@ -59,6 +57,7 @@ public class NetworkSimulator {
                     int stepsize = -1;
                     int numberOfTests = -1;
                     Link[] links = null;
+                    boolean verbose = false;
                     for(int i = 1; i < inputSplit.length; i+=2) {
                         if(i+1 >= inputSplit.length) {
                             System.out.println("Invalid setuptcp command, type \"help\" for list of commands.");
@@ -128,6 +127,9 @@ public class NetworkSimulator {
                                 break;
                             }
                         }
+                        if(inputSplit[i].equals("-v")) {
+                            verbose = true;
+                        }
                     }
 
                     if(startID == -1 || destID == -1 || testname == -1 || stepsize == -1) {
@@ -142,8 +144,8 @@ public class NetworkSimulator {
                         System.out.println("Invalid run command, type \"help\" for list of commands.");
                         break;
                     }
-                    
-                    TestConfig testConfig = new TestConfig(startID, destID, links, fileSize, filename, testname, stepsize, numberOfTests, mtu, sws);
+
+                    TestConfig testConfig = new TestConfig(startID, destID, links, fileSize, filename, testname, stepsize, numberOfTests, mtu, sws, verbose);
                     run(testConfig);
                 }
             }
@@ -177,6 +179,7 @@ public class NetworkSimulator {
                     System.out.println("            -c number of tests to run (default is 3 if not provided)");
                     System.out.println("            -f file size to be sent (in KB) (if none provided, default is 200KB)");
                     System.out.println("            -n name of file to be sent (if none provided, will create one)");
+                    System.out.println("            -v verbose mode");
                     System.out.println("  2. setup [filename]: sets up the network based on topology in file");
                     System.out.println("  3. settcp: sets some parameters for TCP");
                     System.out.println("            -m sets maximum transmission unit in bytes");
@@ -261,8 +264,8 @@ public class NetworkSimulator {
             String outputFilename = filePrefix + i + FILE_NAME_EXTENSION;
 
             scheduler = new Scheduler();
-            TCPsender sender = new TCPsender(testConfig.sourceID, testConfig.destID, filename, testConfig.mtu, testConfig.sws, scheduler);
-            TCPrecver receiver = new TCPrecver(testConfig.sourceID, outputFilename, testConfig.mtu, testConfig.sws); 
+            TCPsender sender = new TCPsender(testConfig.sourceID, testConfig.destID, filename, testConfig.mtu, testConfig.sws, scheduler, testConfig.verbose);
+            TCPrecver receiver = new TCPrecver(testConfig.sourceID, outputFilename, testConfig.mtu, testConfig.sws, scheduler, testConfig.verbose); 
 
             
             /**
@@ -306,7 +309,7 @@ public class NetworkSimulator {
                 }
 
                 if(currEvent.getType() == Event.EventType.TIMEOUT_CHECK) {
-                    sender.checkTimeout(currEvent.getPacket(), currEvent.getSequenceNo());
+                    sender.checkTimeout(currEvent.getPacket(), currEvent.getSequenceNo(), currEvent.getLength());
                     // get a data structure from sender that records if a packet received an ack
                     // if received, just continue, if not, send packet again
                 }

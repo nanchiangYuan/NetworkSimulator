@@ -24,6 +24,9 @@ public class TCPrecver{
 
     private int expectedSeq; // the next expected byte
 
+    private boolean verbose;
+    private Scheduler scheduler;
+
     // final stats
     private int invalidChecksumCount = 0;
     private int droppedPacketCount = 0;
@@ -43,16 +46,18 @@ public class TCPrecver{
      * @param mtu
      * @param sws
      */
-    TCPrecver(short sourceID, String filename, int mtu, int sws) {
+    TCPrecver(short sourceID, String filename, int mtu, int sws, Scheduler sched, boolean v) {
 
         this.senderID = sourceID;
         this.filename = filename;
         this.mtu = mtu;
         this.sws = sws;
+        this.scheduler = sched;
         
         this.buffer = new ConcurrentHashMap<>();
         this.sequenceNo = 0;
         this.expectedSeq = 0;
+        this.verbose = v;
     }
 
     /**

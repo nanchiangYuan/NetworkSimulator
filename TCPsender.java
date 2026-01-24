@@ -47,6 +47,8 @@ public class TCPsender {
     private int dupAckCount = 0;
 
     private double segmentLifetime = 60000.0; // in ms, 60 sec
+    
+    private boolean verbose;
 
     public static enum RenoState {
         SLOW_START,
@@ -62,7 +64,7 @@ public class TCPsender {
      * @param m mtu in bytes
      * @param s sliding window size in segments
      */
-    TCPsender(short sID, short dID, String fn, int m, int s, Scheduler sched) {
+    TCPsender(short sID, short dID, String fn, int m, int s, Scheduler sched, boolean v) {
 
         this.sourceID = sID;
         this.destinationID = dID;
@@ -81,6 +83,7 @@ public class TCPsender {
         this.ssthresh = 64; // random large number that is 2^n
 
         this.timeout = 5000.0; // 5 seconds
+        this.verbose = v;
     }
 
     /**

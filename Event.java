@@ -56,6 +56,10 @@ public class Event implements Comparable<Event>{
         return this.seqNo;
     }
 
+    public int getLength() {
+        return this.length;
+    }
+
     /**
      * 
      * @return event to add onto queue (timeout mostly)
