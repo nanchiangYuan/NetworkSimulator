@@ -1,20 +1,39 @@
 public class Event implements Comparable<Event>{
 
     private SimplePacket packet;
+    private int seqNo;
+    private int length;
     private EventType type;
-    private double time;
-    private Node destination;
+    private double time;        // the time this event is happening at
+    private Node destination;   // the arrival node (not necessarily the end destination, just the next node on the link), null for timeout check
 
     public static enum EventType {
         ARRIVE,
-        TIMEOUT_CHECK
+        TIMEOUT_CHECK,
+        TIME_WAIT
     }
 
+    // for arrive
     Event(SimplePacket packet, EventType type, double time, Node dest) {
         this.packet = packet;
         this.type = type;
         this.time = time;
         this.destination = dest;
+    }
+
+    // for timeout
+    Event(SimplePacket packet, int sequenceNo, int length, EventType type, double time) {
+        this.packet = packet;
+        this.seqNo = sequenceNo;
+        this.length = length;
+        this.type = type;
+        this.time = time;
+    }
+
+    // for time wait
+    Event(EventType type, double time) {
+        this.type = type;
+        this.time = time;
     }
 
     public SimplePacket getPacket() {
@@ -31,6 +50,10 @@ public class Event implements Comparable<Event>{
 
     public Node getDestination() {
         return this.destination;
+    }
+
+    public int getSequenceNo() {
+        return this.seqNo;
     }
 
     /**

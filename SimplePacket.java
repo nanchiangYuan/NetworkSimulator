@@ -10,7 +10,7 @@ public class SimplePacket {
     private short checksum = 0;     // not used
     private byte[] payload;
 
-    private final short HEADER_LENGTH = 8; // in bytes
+    public final static short HEADER_LENGTH = 8; // in bytes
 
     SimplePacket(short source, short dest, byte[] payload) {
         this.sourceID = source;

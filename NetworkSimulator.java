@@ -306,7 +306,7 @@ public class NetworkSimulator {
                 }
 
                 if(currEvent.getType() == Event.EventType.TIMEOUT_CHECK) {
-                    sender.checkTimeout(currEvent.getPacket());
+                    sender.checkTimeout(currEvent.getPacket(), currEvent.getSequenceNo());
                     // get a data structure from sender that records if a packet received an ack
                     // if received, just continue, if not, send packet again
                 }
