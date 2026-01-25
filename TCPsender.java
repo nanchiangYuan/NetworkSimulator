@@ -76,6 +76,7 @@ public class TCPsender {
         this.buffer = new ArrayList<>();
         this.lastAck = -1;
         this.lastSent = -1;
+        this.expRcvNo = 0;
         this.dupAcks = 0;
         this.scheduler = sched;
         this.state = State.CLOSED;
@@ -92,8 +93,6 @@ public class TCPsender {
      */
     public void initConnection() {
 
-        System.out.println("initializing connection");
-
         if(state != State.CLOSED) {
             System.out.println("initializing connection state error");
             return;
@@ -109,11 +108,12 @@ public class TCPsender {
         // send segment
         node.send(initPacket);
 
+        printStat(init, "snd");
+
         sentDataSize += init.getLength();
         sentPacketCount ++;
 
         state = State.SYN_SENT;
-        System.out.println("after initConnection(): state: " + state);
 
     }
     
@@ -129,6 +129,8 @@ public class TCPsender {
 
         receivedPacketCount ++;
         receivedDataSize += message.getLength();
+
+        printStat(message, "rcv");
 
         // check state, do different things based on state
         if(state == State.SYN_SENT) {
@@ -150,14 +152,17 @@ public class TCPsender {
 
             int inSeqNO = message.getSequenceNo();
             sequenceNo += 1;
+            expRcvNo = inSeqNO + 1;
             
             // third packet 
-            TCPmessage init2 = new TCPmessage(sequenceNo, inSeqNO + 1, 0, scheduler.getCurrentTime());
+            TCPmessage init2 = new TCPmessage(sequenceNo, expRcvNo, 0, scheduler.getCurrentTime());
             init2.setFlag('A');
             byte[] initBytes2 = init2.serialize();
             SimplePacket initPacket2 = new SimplePacket(sourceID, destinationID, initBytes2);
             
             node.send(initPacket2);
+
+            printStat(init2, "snd");
 
             sentDataSize += init2.getLength();
             sentPacketCount ++;
@@ -332,6 +337,8 @@ public class TCPsender {
 
         Event timeoutE = new Event(TCPpacket, message.getSequenceNo(), message.getLength(), Event.EventType.TIMEOUT_CHECK, scheduler.getCurrentTime() + timeout);
         scheduler.schedule(timeoutE);
+
+        printStat(message, "snd");
     }
 
     /**
@@ -340,6 +347,10 @@ public class TCPsender {
      * @param sndRcv snd or rcv
      */
     public void printStat(TCPmessage packet, String sndRcv) {
+
+        if(!verbose)
+            return; 
+
         StringBuilder output = new StringBuilder();
         output.append(sndRcv);
         output.append(" ");

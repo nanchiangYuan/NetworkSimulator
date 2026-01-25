@@ -27,6 +27,8 @@ public class TCPrecver{
     private boolean verbose;
     private Scheduler scheduler;
 
+    private State state;
+
     // final stats
     private int invalidChecksumCount = 0;
     private int droppedPacketCount = 0;
@@ -53,11 +55,28 @@ public class TCPrecver{
         this.mtu = mtu;
         this.sws = sws;
         this.scheduler = sched;
+        this.state = State.LISTEN;
         
         this.buffer = new ConcurrentHashMap<>();
         this.sequenceNo = 0;
         this.expectedSeq = 0;
         this.verbose = v;
+    }
+
+    public void receive(SimplePacket packet) {
+
+        TCPmessage message = new TCPmessage(0, 0, 0, 0);
+        message = message.deserialize(packet.getPayload());
+        receivedPacketCount++;
+        receivedDataSize += message.getLength();
+
+        if(state == State.LISTEN) {
+            if(message.isSYN()) {
+                initConnectionResponse(message);
+                state = State.SYN_RCVD;
+            }
+        }
+
     }
 
     /**
