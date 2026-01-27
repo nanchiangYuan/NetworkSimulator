@@ -10,14 +10,14 @@ import java.util.Arrays;
  */
 public class TCPsender {
 
-    private short sourceID;
-    private short destinationID;
-    private String filename;
-    private int mtu; // bytes
-    private int mss; // bytes
-    private int cwnd; // congestion window in packets
-    private int sequenceNo; // the sequence number sender puts on its packets
-    private int expRcvNo; // the expected sequence to get from receiver
+    private short sourceID;             // sender ID
+    private short destinationID;        // receiver ID
+    private String filename;            // input file name
+    private int mtu;                    // maximum transmission unit in bytes
+    private int mss;                    // in bytes
+    private int cwnd;                   // congestion window in packets
+    private int sequenceNo;             // the sequence number sender puts on its packets
+    private int expRcvNo;               // the expected sequence to get from receiver
     private Scheduler scheduler;
 
     private ArrayList<TCPmessage> buffer;
@@ -49,6 +49,7 @@ public class TCPsender {
     private double segmentLifetime = 60000.0; // in ms, 60 sec
     
     private boolean verbose;
+    private TCPStat stat;
 
     public static enum RenoState {
         SLOW_START,
@@ -64,10 +65,11 @@ public class TCPsender {
      * @param m mtu in bytes
      * @param s sliding window size in segments
      */
-    TCPsender(short sID, short dID, String fn, int m, int s, Scheduler sched, boolean v) {
+    TCPsender(short sID, short dID, Node node, String fn, int m, Scheduler sched, boolean v) {
 
         this.sourceID = sID;
         this.destinationID = dID;
+        this.node = node;
         this.filename = fn;
         this.mtu = m;
         this.mss = this.mtu - TCPmessage.HEADER_LENGTH - SimplePacket.HEADER_LENGTH;
@@ -85,6 +87,7 @@ public class TCPsender {
 
         this.timeout = 5000.0; // 5 seconds
         this.verbose = v;
+        this.stat = new TCPStat("sender");
     }
 
     /**
@@ -101,20 +104,106 @@ public class TCPsender {
         // build segment for sending
         TCPmessage init = new TCPmessage(sequenceNo, 0, 0, scheduler.getCurrentTime());
         init.setFlag('S');
-        byte[] initBytes = init.serialize();
-        
-        SimplePacket initPacket = new SimplePacket(sourceID, destinationID, initBytes);
 
         // send segment
-        node.send(initPacket);
-
-        printStat(init, "snd");
-
-        sentDataSize += init.getLength();
-        sentPacketCount ++;
+        sendPacket(init);
 
         state = State.SYN_SENT;
+        sequenceNo += 1;
+    }
 
+    public void initWaitForAck(TCPmessage message) {
+
+        if(!message.isSYN() || !message.isACK() || message.getAcknowledgment() != sequenceNo + 1) {
+            System.out.println("sender: init received wrong info");
+            return;
+        }
+
+        stat.addReceivedData(1, message.getLength());
+        stat.printPackets(message, "rcv", scheduler.getCurrentTime(), verbose);
+
+        // calculate first value for timeout
+        ertt = scheduler.getCurrentTime() - message.getTimestamp();
+        timeout = ertt * 2.0;
+
+        int inSeqNO = message.getSequenceNo();
+        
+        expRcvNo = inSeqNO + 1;
+        
+        // third packet 
+        TCPmessage init2 = new TCPmessage(sequenceNo, expRcvNo, 0, scheduler.getCurrentTime());
+        init2.setFlag('A');
+
+        sendPacket(init2);
+        
+        node.send(initPacket2);
+
+        printStat(init2, "snd");
+
+        sentDataSize += init2.getLength();
+        sentPacketCount ++;
+
+        dataIntoBuffer();
+
+        // start sending data: sends until cwnd is reached, then only send when space is free
+        sendData();
+    }
+
+    public void processPacket(TCPmessage message) {
+        // just ack messages
+        if(message.isACK()) {
+            recalculateTimeout(message.getTimestamp());
+            int recvdAckNo = message.getAcknowledgment();
+            int recvdSeq = message.getSequenceNo();
+
+            // 1. check if ack is before or after lastAck
+            // 2. if after, move lastAck forward,
+            // call cwnd and send data
+
+            // check if the receiver expected the correct ack, which is ones after lastAck
+            if(recvdAckNo/mss >= lastAck + 1) {
+                reno = RenoState.CONGESTION_AVOIDANCE;
+                lastAck = recvdAckNo/mss;
+                dupAcks = 0;
+                calculateCongestionWindow();
+                sendData();
+
+                // this means the last ack has arrived, file transfer completed
+                if(lastSent == buffer.size() - 1 && lastAck == buffer.size() - 1) {
+                    state = State.FIN_WAIT_1;
+                    terminateConnection();
+                }
+            }
+            // check if the receiver expected the same packet, which indicates this is a duplicate ack
+            else if(recvdAckNo/mss == lastAck) {
+                dupAcks++;
+                dupAckCount ++;
+
+                // fast retransmission
+                if(dupAcks == 3) {
+                    sendPacket(buffer.get(recvdAckNo/mss));
+
+                    // cwnd drops
+                    ssthresh = cwnd;
+                    cwnd /= 2;
+
+                    reno = RenoState.FAST_RECOVERY;
+                    int count = sendData();
+                    retransmissionCount += count;
+                }
+                if(dupAcks >= 4) {  
+                    calculateCongestionWindow();
+                    int count = sendData();
+                    retransmissionCount += count;
+                }
+            } else {
+                // ignore
+            }
+            // 3. if not, mark in ackList, if ack is > 3, fast retransmit of previous (need to somehow restart timeout)
+            //    ssthresh = cwnd, cwnd = ssthresh / 2, if next ack is new, congestion avoidance, if not(more dup ack), fast recovery
+
+            expRcvNo = recvdSeq + 1;
+        }
     }
     
     /**
@@ -132,117 +221,21 @@ public class TCPsender {
 
         printStat(message, "rcv");
 
-        // check state, do different things based on state
-        if(state == State.SYN_SENT) {
-
-            if(!message.isSYN() || !message.isACK() || message.getAcknowledgment() != sequenceNo + 1) {
-                System.out.println("sender: init received wrong info");
-                return;
-            }
-
-            receivedPacketCount ++;
-            receivedDataSize += message.getLength();
-            
-            // calculate first value for timeout
-            ertt = scheduler.getCurrentTime() - message.getTimestamp();
-            timeout = ertt * 2.0;
-
-            // set initial timeout
-            // this.node.setTimeout((int)(this.timeout / 1000000)); // milliseconds
-
-            int inSeqNO = message.getSequenceNo();
-            sequenceNo += 1;
-            expRcvNo = inSeqNO + 1;
-            
-            // third packet 
-            TCPmessage init2 = new TCPmessage(sequenceNo, expRcvNo, 0, scheduler.getCurrentTime());
-            init2.setFlag('A');
-            byte[] initBytes2 = init2.serialize();
-            SimplePacket initPacket2 = new SimplePacket(sourceID, destinationID, initBytes2);
-            
-            node.send(initPacket2);
-
-            printStat(init2, "snd");
-
-            sentDataSize += init2.getLength();
-            sentPacketCount ++;
-
-            state = State.ESTABLISHED;
-            
-            dataIntoBuffer();
-
-            // start sending data: sends until cwnd is reached, then only send when space is free
-            sendData();
-
-            return;
-
-        }
-
-        // should be for acks
-        if(state == State.ESTABLISHED) {
-
-            // just ack messages
-            if(message.isACK()) {
-                recalculateTimeout(message.getTimestamp());
-                int recvdAckNo = message.getAcknowledgment();
-                int recvdSeq = message.getSequenceNo();
-
-                // 1. check if ack is before or after lastAck
-                // 2. if after, move lastAck forward,
-                // call cwnd and send data
-
-                // check if the receiver expected the correct ack, which is ones after lastAck
-                if(recvdAckNo/mss >= lastAck + 1) {
-                    reno = RenoState.CONGESTION_AVOIDANCE;
-                    lastAck = recvdAckNo/mss;
-                    dupAcks = 0;
-                    calculateCongestionWindow();
-                    sendData();
-
-                    // this means the last ack has arrived, file transfer completed
-                    if(lastSent == buffer.size() - 1 && lastAck == buffer.size() - 1) {
-                        state = State.FIN_WAIT_1;
-                        terminateConnection();
-                    }
-                }
-                // check if the receiver expected the same packet, which indicates this is a duplicate ack
-                else if(recvdAckNo/mss == lastAck) {
-                    dupAcks++;
-                    dupAckCount ++;
-
-                    // fast retransmission
-                    if(dupAcks == 3) {
-                        sendPacket(buffer.get(recvdAckNo/mss));
-
-                        // cwnd drops
-                        ssthresh = cwnd;
-                        cwnd /= 2;
-
-                        reno = RenoState.FAST_RECOVERY;
-                        int count = sendData();
-                        retransmissionCount += count;
-                    }
-                    if(dupAcks >= 4) {  
-                        calculateCongestionWindow();
-                        int count = sendData();
-                        retransmissionCount += count;
-                    }
-                } else {
-                    // ignore
-                }
-                // 3. if not, mark in ackList, if ack is > 3, fast retransmit of previous (need to somehow restart timeout)
-                //    ssthresh = cwnd, cwnd = ssthresh / 2, if next ack is new, congestion avoidance, if not(more dup ack), fast recovery
-
-                expRcvNo = recvdSeq + 1;
-            }
-        }
-
-        if(state == State.FIN_WAIT_1) {
-            // if received ack of fin from receiver, enter termination function
-            if(message.isACK() && message.isFIN()) {
-                terminateConnectionResponse();
-                return;
-            }
+        switch(state) {
+            case State.SYN_SENT:
+                initWaitForAck(message);
+                state = State.ESTABLISHED;
+                break;
+            case State.ESTABLISHED:
+                processPacket(message);
+                break;
+            case State.FIN_WAIT_1:
+                // if received ack of fin from receiver, enter termination function
+                if(message.isACK() && message.isFIN()) 
+                    terminateConnectionResponse();
+                break;
+            default:
+                break;
         }
 
     }
@@ -332,13 +325,12 @@ public class TCPsender {
         SimplePacket TCPpacket = new SimplePacket(sourceID, destinationID, stream);
 
         node.send(TCPpacket);
-        sentDataSize += message.getLength();
-        sentPacketCount++;  
+        stat.addSentData(1, message.getLength());
+        stat.printPackets(message, "snd", scheduler.getCurrentTime(), verbose);
 
         Event timeoutE = new Event(TCPpacket, message.getSequenceNo(), message.getLength(), Event.EventType.TIMEOUT_CHECK, scheduler.getCurrentTime() + timeout);
         scheduler.schedule(timeoutE);
 
-        printStat(message, "snd");
     }
 
     /**

@@ -8,5 +8,6 @@ public enum State{
     FIN_WAIT_2,
     TIME_WAIT,
     CLOSE_WAIT,
+    CLOSING,
     LAST_ACK
 }

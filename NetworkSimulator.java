@@ -8,11 +8,11 @@ public class NetworkSimulator {
     private static SimpleNetwork network;
 
     private static String[] COMMANDS = {"run", "showconfig", "setup", "exit", "help", "setuptcp"};
-    private static String[] RUN_CONFIG = {"latency", "bandwidth", "queuesize"};
 
-    private static final int DEFAULT_FILE_SIZE = 200; // in KB
-    private static final int DEFAULT_MTU = 1500; // in bytes
-    private static final int DEFAULT_SWS = 10; // number of segments
+    private static final int DEFAULT_FILE_SIZE = 200;           // in KB
+    private static final int DEFAULT_MTU = 1500;                // in bytes
+    private static final int DEFAULT_RECV_BUFFER_SIZE = 20;     // number of segments
+    private static final int DEFAULT_NUMBER_OF_TESTS = 3;
 
     private static final String INITIAL_FILE_NAME = "test_original.txt";
     private static final String LATENCY_FILE_NAME = "test_latency_";
@@ -26,13 +26,27 @@ public class NetworkSimulator {
 
     private static Scheduler scheduler;
 
-    record TestConfig(short sourceID, short destID, Link[] links, int filesize, String filename, int test, int stepSize, int testCount, int mtu, int sws, boolean verbose) {}
+    private record TestConfig(
+        short sourceID, 
+        short destID, 
+        Node sourceNode, 
+        Node destNode, 
+        Link[] links, 
+        int filesize, 
+        String filename, 
+        int test, 
+        int stepSize, 
+        int testCount, 
+        int mtu, 
+        int rcvBufSize, 
+        boolean verbose
+    ) {}
 
     public static void main(String args[]) {
 
         int fileSize = DEFAULT_FILE_SIZE;
         int mtu = DEFAULT_MTU;
-        int sws = DEFAULT_SWS;
+        int rcvBufSize = DEFAULT_RECV_BUFFER_SIZE;
 
         Scanner in = new Scanner(System.in);
         
@@ -58,6 +72,7 @@ public class NetworkSimulator {
                     int numberOfTests = -1;
                     Link[] links = null;
                     boolean verbose = false;
+
                     for(int i = 1; i < inputSplit.length; i+=2) {
                         if(i+1 >= inputSplit.length) {
                             System.out.println("Invalid setuptcp command, type \"help\" for list of commands.");
@@ -101,7 +116,6 @@ public class NetworkSimulator {
                                 System.out.println("Invalid run command, type \"help\" for list of commands.");
                                 break;
                             }
-                                
                         }
                         if(inputSplit[i].equals("-p")) {
                             try{
@@ -138,14 +152,14 @@ public class NetworkSimulator {
                     }
                         
                     if(numberOfTests == -1)
-                        numberOfTests = 3;
+                        numberOfTests = DEFAULT_NUMBER_OF_TESTS;
 
                     if(links == null) {
                         System.out.println("Invalid run command, type \"help\" for list of commands.");
                         break;
                     }
 
-                    TestConfig testConfig = new TestConfig(startID, destID, links, fileSize, filename, testname, stepsize, numberOfTests, mtu, sws, verbose);
+                    TestConfig testConfig = new TestConfig(startID, destID, network.getNodeFromID(startID), network.getNodeFromID(destID), links, fileSize, filename, testname, stepsize, numberOfTests, mtu, sws, verbose);
                     run(testConfig);
                 }
             }
@@ -264,8 +278,8 @@ public class NetworkSimulator {
             String outputFilename = filePrefix + i + FILE_NAME_EXTENSION;
 
             scheduler = new Scheduler();
-            TCPsender sender = new TCPsender(testConfig.sourceID, testConfig.destID, filename, testConfig.mtu, testConfig.sws, scheduler, testConfig.verbose);
-            TCPrecver receiver = new TCPrecver(testConfig.sourceID, outputFilename, testConfig.mtu, testConfig.sws, scheduler, testConfig.verbose); 
+            TCPsender sender = new TCPsender(testConfig.sourceID, testConfig.destID, testConfig.sourceNode, filename, testConfig.mtu, scheduler, testConfig.verbose);
+            TCPrecver receiver = new TCPrecver(testConfig.destID, testConfig.sourceID, testConfig.destNode, outputFilename, testConfig.mtu, testConfig.rcvBufSize, scheduler, testConfig.verbose); 
 
             
             /**
@@ -287,7 +301,9 @@ public class NetworkSimulator {
              * Then i call tcp receiver's receive function to process the packet. 
              */
 
+            receiver.listen();
             sender.initConnection();    // only sends first handshake
+            
 
             while(!scheduler.getQueue().isEmpty()) {
                 
