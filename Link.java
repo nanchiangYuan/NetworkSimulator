@@ -1,8 +1,13 @@
+import java.util.Arrays;
+import java.util.Random;
+
 public class Link {
-    private int queueSize;
-    private int bandwidth; // in bits
-    private int latency; // in ms
-    private int bufferSize; // in KB
+    private double bandwidth; // in bits
+    private double latency; // in ms
+    private double bufferSize; // in B
+    private double lossRate;
+    private double corruptionRate;
+
     private double nextAvailableTime;
 
     private int id;     // for debugging
@@ -14,18 +19,30 @@ public class Link {
 
     private double fullBufferTime;
 
-    Link(Node n1, Node n2, int queueSize, int bandwidth, int latency, Scheduler scheduler) {
-        this.queueSize = queueSize;
+    private double bandwidthFromFile;
+    private double latencyFromFile;
+    private double bufferSizeFromFile;
+    private double lossRateFromFile;
+
+    Link(Node n1, Node n2, double bufferSize, double bandwidth, double latency, double lossrate, Scheduler scheduler) {
         this.bandwidth = bandwidth;     // in Mbps
         this.latency = latency;
-        this.bufferSize = queueSize;
+        this.bufferSize = bufferSize;
+        this.lossRate = lossrate;
         this.nextAvailableTime = 0.0;
         this.fromNode = n1;
         this.toNode = n2;
         this.scheduler = scheduler;
         this.fullBufferTime = (this.bufferSize * 8.0) / (this.bandwidth * 1000000.0) * 1000.0;
         this.id = idPool;
+        this.lossRate = 0.0;
+        this.corruptionRate = 0.01;
         idPool++; 
+
+        this.bandwidthFromFile = bandwidth;
+        this.latencyFromFile = latency;
+        this.bufferSizeFromFile = bufferSize;
+        this.lossRateFromFile = lossrate;
     }
 
     public void setConnections(Node n1, Node n2) {
@@ -33,15 +50,15 @@ public class Link {
         this.toNode = n2;
     }
 
-    public void setQueueSize(int size) {
-        this.queueSize = size;
+    public void setBufferSize(double size) {
+        this.bufferSize = size;
     }
 
-    public void setBandwidth(int bandwidth) {
+    public void setBandwidth(double bandwidth) {
         this.bandwidth = bandwidth;
     }
 
-    public void setLatency(int latency) {
+    public void setLatency(double latency) {
         this.latency = latency;
     }
 
@@ -53,16 +70,44 @@ public class Link {
         return this.toNode;
     }
 
-    public int getQueueSize() {
-        return this.queueSize;
+    public double getBufferSize() {
+        return this.bufferSize;
     }
 
-    public int getBandwidth() {
+    public double getBandwidth() {
         return this.bandwidth;
     }
 
-    public int getLatency() {
+    public double getLatency() {
         return this.latency;
+    }
+
+    public int getID() {
+        return this.id;
+    }
+
+    public double getLossRate() {
+        return lossRate;
+    }
+
+    public void setScheduler(Scheduler sched) {
+        this.scheduler = sched;
+    }
+
+    public void setLossRate(double rate) {
+        lossRate = rate;
+    }
+
+    public void reset() {
+        nextAvailableTime = 0.0;
+        fullBufferTime = (this.bufferSize * 8.0) / (this.bandwidth * 1000000.0) * 1000.0;
+    }
+
+    public void resetConfig() {
+        bandwidth = bandwidthFromFile;
+        latency = latencyFromFile;
+        bufferSize = bufferSizeFromFile;
+        lossRate = lossRateFromFile;
     }
 
     public String toString() {
@@ -76,6 +121,27 @@ public class Link {
      * @return false if dropping a packet, true if no error 
      */
     public void send(SimplePacket packet) {
+
+        if(lossRate > 0.0) {
+            Random rand = new Random();
+            double prob = rand.nextDouble() * 100.0;
+
+            if(prob <= lossRate)
+                return;            
+        }
+
+        if(corruptionRate > 0.0) {
+            Random rand = new Random();
+            double prob = rand.nextDouble() * 100.0;
+
+            if(prob <= corruptionRate) {
+                byte[] data = Arrays.copyOf(packet.getPayload(), packet.getPayload().length);
+                int index = rand.nextInt(0, data.length);
+                data[index] = (byte) (data[index] ^ 0xFF);
+                packet = packet.clone();
+                packet.setPayload(data);
+            }
+        }
 
         // calculate delay caused by bandwidth, in ms
         // ms = (Bytes * 8) / (Mb / s * 1,000,000) * 1,000
@@ -100,6 +166,19 @@ public class Link {
     }
 
     public boolean receive(SimplePacket packet) {
+        return false;
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if(this == obj)
+            return true;
+
+        if(obj instanceof Link) {
+            Link o = (Link) obj;
+            if(o.getID() == this.id)
+                return true;
+        }
         return false;
     }
 
