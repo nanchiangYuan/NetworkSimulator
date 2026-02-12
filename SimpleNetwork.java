@@ -135,15 +135,15 @@ public class SimpleNetwork {
 
         System.out.println("Hosts: ");
         for (Node node : hosts) {
-            System.out.println(node);
+            System.out.println(" " + node);
         }
         System.out.println("Routers: ");
         for (Node node : routers) {
-            System.out.println(node);
+            System.out.println(" " + node);
         }
         System.out.println("Links: ");
         for (Link link : links) {
-            System.out.println(link);
+            System.out.println(" " + link);
         }
 
     }
