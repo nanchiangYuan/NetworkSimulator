@@ -111,7 +111,11 @@ public class Link {
     }
 
     public String toString() {
-        return "link " + this.id + " : from " + this.fromNode.getName() + ", to " + this.toNode.getName();
+        StringBuilder linkInfo = new StringBuilder();
+        linkInfo.append("link " + this.id + ": ");
+        linkInfo.append(this.fromNode.getName() + " to " + this.toNode.getName() + "\n");
+        linkInfo.append("    bandwidth: " + bandwidth + ", latency: " + latency + ", buffer size: " + bufferSize + ", loss rate: " + lossRate + ", corruption rate: " + corruptionRate);
+        return linkInfo.toString();
     }
 
     /**
