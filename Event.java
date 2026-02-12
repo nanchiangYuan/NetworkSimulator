@@ -22,12 +22,10 @@ public class Event implements Comparable<Event>{
     }
 
     // for timeout
-    Event(SimplePacket packet, int sequenceNo, int length, EventType type, double time) {
-        this.packet = packet;
-        this.seqNo = sequenceNo;
-        this.length = length;
+    Event(int oldestSequenceNo, EventType type, double timeout) {
+        this.seqNo = oldestSequenceNo;
         this.type = type;
-        this.time = time;
+        this.time = timeout;
     }
 
     // for time wait
@@ -83,7 +81,12 @@ public class Event implements Comparable<Event>{
 
     @Override
     public String toString() {
-        return this.packet + ", " + this.type + ", " + time;
+        return "[E] seq: " + seqNo + ", " + type + ", " + time + ", dest: " + destination.getID();
+    }
+
+    // for timeout
+    public String toTimeoutString() {
+        return "[E] oldest seq: " + seqNo + ", " + type + ", " + time;
     }
 
 }
