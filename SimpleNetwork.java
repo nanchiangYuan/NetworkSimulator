@@ -101,24 +101,26 @@ public class SimpleNetwork {
                 return false;
             }
 
-            int queueSize;
-            int bandwidth;
-            int latency;
+            double queueSize;
+            double bandwidth;
+            double latency;
+            double lossrate;
 
             try {
-                queueSize = Integer.valueOf(features[3]);
-                bandwidth = Integer.valueOf(features[4]);
-                latency = Integer.valueOf(features[5]);
+                queueSize = Double.valueOf(features[3]);
+                bandwidth = Double.valueOf(features[4]);
+                latency = Double.valueOf(features[5]);
+                lossrate = Double.valueOf(features[6]);
             } catch (NumberFormatException e) {
                 System.out.println("File format error: not numbers");
                 return false;
             }
-            Link newLink1 = new Link(n1, n2, queueSize, bandwidth, latency, this.scheduler);
-            Link newLink2 = new Link(n2, n1, queueSize, bandwidth, latency, this.scheduler);
+            Link newLink1 = new Link(n1, n2, queueSize, bandwidth, latency, lossrate, this.scheduler);
+            Link newLink2 = new Link(n2, n1, queueSize, bandwidth, latency, lossrate, this.scheduler);
             links.add(newLink1);
             links.add(newLink2);
-            n1.addLink(n2, newLink2);
-            n2.addLink(n1, newLink1);
+            n1.addLink(n2, newLink1);
+            n2.addLink(n1, newLink2);
 
         }
         else {
@@ -164,11 +166,11 @@ public class SimpleNetwork {
         // System.out.println(" ------ end --------");
         for(Node host: hosts) {
             host.buildRoutingTable(nodeList);
-            host.printTable();
+            // host.printTable();
         }
         for(Node router: routers) {
             router.buildRoutingTable(nodeList);
-            router.printTable();
+            // router.printTable();
         }
 
     }
