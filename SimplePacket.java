@@ -49,4 +49,13 @@ public class SimplePacket {
         return HEADER_LENGTH + this.payload.length;
     }
 
+    public String toString() {
+        return "[s: "+sourceID+", d: "+destID+", len: "+length+"]";
+    }
+
+    public SimplePacket clone() {
+        SimplePacket cloned = new SimplePacket(sourceID, destID, payload);
+        return cloned;
+    }
+
 }
