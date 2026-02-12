@@ -11,7 +11,7 @@ import java.util.HashMap;
 public class TCPrecver{
     private String filename;            // output file
     private int mtu;
-    private int sws;                    // buffer size
+    private int bufferSize;                    // buffer size
     private HashMap<Integer, TCPmessage> buffer;
     private int sequenceNo;
 
@@ -35,21 +35,23 @@ public class TCPrecver{
     private int sentPacketCount = 0;
     private int sentDataSize = 0;
 
+    private TCPStat stat;
+
     /**
      * constructor
      * @param port
      * @param filename
      * @param mtu
-     * @param sws
+     * @param bufferSize
      */
-    TCPrecver(short sourceID, short destID, Node node, String filename, int mtu, int sws, Scheduler sched, boolean v) {
+    TCPrecver(short sourceID, short destID, Node node, String filename, int mtu, int bufferSize, Scheduler sched, boolean v) {
 
         this.sourceID = sourceID;
         this.destinationID = destID;
         this.filename = filename;
         this.node = node;
         this.mtu = mtu;
-        this.sws = sws;
+        this.bufferSize = bufferSize;
         this.scheduler = sched;
         this.state = State.CLOSED;
         
@@ -57,6 +59,12 @@ public class TCPrecver{
         this.sequenceNo = 0;
         this.expectedSeq = 0;
         this.verbose = v;
+
+        this.stat = new TCPStat("receiver");
+    }
+
+    public TCPStat getStat() {
+        return stat;
     }
 
     public void listen() {
@@ -73,13 +81,17 @@ public class TCPrecver{
 
     public void receive(SimplePacket packet) {
 
+        if(!checksumCheck(packet.getPayload())) {
+            stat.addInvalidChecksum(1);
+            return;
+        }
+
         // retrieve payload
         TCPmessage message = new TCPmessage(0, 0, 0, 0);
         message = message.deserialize(packet.getPayload());
-        receivedPacketCount++;
-        receivedDataSize += message.getLength();
 
-        printStat(message, "rcv");
+        stat.addReceivedData(1, message.getLength());
+        stat.printPackets(message, "rcv", scheduler.getCurrentTime(), verbose);
 
         switch(state) {
 
@@ -93,6 +105,11 @@ public class TCPrecver{
             case State.SYN_RCVD:
                 if(message.isACK() && message.getSequenceNo() == expectedSeq)
                     state = State.ESTABLISHED;
+                else if(message.isSYN()) {
+                    sequenceNo -= 1;
+                    initConnectionResponse(message);
+                }
+                    
                 break;
             
             case State.ESTABLISHED:
@@ -103,6 +120,11 @@ public class TCPrecver{
                 break;
             
             case State.LAST_ACK:
+                if(message.isFIN()) {
+                    sequenceNo -= 2;
+                    terminateConnectionAck(message);
+                    break;
+                }
                 waitForAck(message);
                 break;
             default:
@@ -113,29 +135,25 @@ public class TCPrecver{
     }
 
     private void receiveData(TCPmessage message) {
-        boolean valid = checksumCheck(message);
-        if(!valid) {
-            System.out.println("checksum wrong");
-            invalidChecksumCount++;
-            return;
-        }
 
         int receivedSeqNo = message.getSequenceNo();
         // if the received packet has a seq number smaller than what the receiver is expecting
         // drop it and send ack again
         if(receivedSeqNo < expectedSeq) {
-            TCPmessage ack = new TCPmessage(sequenceNo, expectedSeq, 0, scheduler.getCurrentTime());
+            TCPmessage ack = new TCPmessage(sequenceNo, expectedSeq, 0, message.getTimestamp());
             sendAck(ack);
-            droppedPacketCount ++;
+            stat.addDroppedPacket(1);
         }
 
         // if received seq number is bigger, put in buffer
         // but if buffer is full, drop it
         else if(receivedSeqNo > expectedSeq) {
-            if(buffer.size() < sws && !buffer.containsKey(receivedSeqNo))
+            if(buffer.size() < bufferSize && !buffer.containsKey(receivedSeqNo))
                 buffer.put(receivedSeqNo, message);
             else
-                droppedPacketCount ++;
+                stat.addDroppedPacket(1);
+            TCPmessage ack = new TCPmessage(sequenceNo, expectedSeq, 0, message.getTimestamp());
+            sendAck(ack);
         // if packet is exactly what the receiver wants, just write to file
         } else if (message.getPayload() != null){
 
@@ -154,12 +172,12 @@ public class TCPrecver{
                 return;
             }
             
-            expectedSeq += message.getLength();
+            expectedSeq = Math.max(expectedSeq + message.getLength(), expectedSeq + 1);
             // if buffer has segments immediately afterwards, write to file also
             while(buffer.containsKey(expectedSeq)) {
                 TCPmessage toBeWritten = buffer.remove(expectedSeq);
                 if(toBeWritten.isFIN()) {
-                    terminateConnectionAck(message.getSequenceNo());
+                    terminateConnectionAck(toBeWritten);
                     return;
                 }
                     
@@ -178,27 +196,27 @@ public class TCPrecver{
                     return;
                 }
                 
-                expectedSeq += toBeWritten.getLength();
+                expectedSeq = Math.max(expectedSeq + toBeWritten.getLength(), expectedSeq + 1);
             }
             // send ack for the segment that is written
-            TCPmessage ack = new TCPmessage(sequenceNo, expectedSeq, 0, scheduler.getCurrentTime());
+            TCPmessage ack = new TCPmessage(sequenceNo, expectedSeq, 0, message.getTimestamp());
             sendAck(ack);
+        } else if(message.isFIN()) {
+            terminateConnectionAck(message);
         }
     }
 
     private void sendPacket(TCPmessage message) {
 
         message.setAcknowledgment(expectedSeq); // expected seqNo from receiver will be different, build packet only when sending
-        message.setTimestamp(scheduler.getCurrentTime());
         byte[] stream = message.serialize();
         SimplePacket TCPpacket = new SimplePacket(sourceID, destinationID, stream);
 
         node.send(TCPpacket);
-        sentDataSize += message.getLength();
-        sentPacketCount++;  
         sequenceNo += Math.max(message.getLength(), 1);
 
-        printStat(message, "snd");
+        stat.addSentData(1, message.getLength());
+        stat.printPackets(message, "snd", scheduler.getCurrentTime(), verbose);
     }
 
     /**
@@ -209,7 +227,7 @@ public class TCPrecver{
 
         expectedSeq = received.getSequenceNo() + 1;
 
-        TCPmessage initR = new TCPmessage(sequenceNo, expectedSeq, 0, scheduler.getCurrentTime());
+        TCPmessage initR = new TCPmessage(sequenceNo, expectedSeq, 0, received.getTimestamp());;
         initR.setFlag('S');
         initR.setFlag('A');
 
@@ -228,70 +246,27 @@ public class TCPrecver{
 
         ack.setFlag('A');
         sendPacket(ack);
-
-        sentPacketCount++;
-        sentDataSize += ack.getLength();
-
-    }
-
-    public void printStat(TCPmessage packet, String sndRcv) {
-        if(!verbose)
-            return; 
-
-        StringBuilder output = new StringBuilder();
-        output.append(sndRcv);
-        output.append(" ");
-        output.append(scheduler.getCurrentTime());
-        output.append(" ");
-        if(packet.isSYN())
-            output.append("S");
-        else
-            output.append("-");
-        output.append(" ");
-        if(packet.isACK())
-            output.append("A");
-        else
-            output.append("-");
-        output.append(" ");
-        if(packet.isFIN())
-            output.append("F");
-        else
-            output.append("-");
-        output.append(" ");
-        if(packet.hasData())
-            output.append("D");
-        else
-            output.append("-");
-
-        output.append(" ");
-        output.append(packet.getSequenceNo());
-        output.append(" ");
-        output.append(packet.getLength());
-        output.append(" ");
-        output.append(packet.getAcknowledgment());
-
-        System.out.println(output.toString());
     }
 
     /**
      * send ack response to sender fin segment
      * @param senderAckNo
      */
-    public void terminateConnectionAck(int senderAckNo) {
+    public void terminateConnectionAck(TCPmessage message) {
 
-        expectedSeq = senderAckNo + 1;
-        TCPmessage finAck = new TCPmessage(sequenceNo, expectedSeq, 0, scheduler.getCurrentTime());
+        expectedSeq = message.getSequenceNo() + 1;
+        TCPmessage finAck = new TCPmessage(sequenceNo, expectedSeq, 0, message.getTimestamp());
         finAck.setFlag('A');
         
         sendPacket(finAck);
         state = State.CLOSE_WAIT;
-        sequenceNo += Math.max(finAck.getLength(), 1);
+        sequenceNo += 1;
 
         TCPmessage rcvFin = new TCPmessage(sequenceNo, expectedSeq, 0, scheduler.getCurrentTime());
         rcvFin.setFlag('F');
         sendPacket(rcvFin);
         state = State.LAST_ACK;
-        sequenceNo += Math.max(finAck.getLength(), 1);
+        sequenceNo += 1;
     }
 
     /**
@@ -300,8 +275,8 @@ public class TCPrecver{
     public void waitForAck(TCPmessage message) {
 
         if(message.isACK()) {
-            receivedPacketCount ++;
             state = State.CLOSED;
+            stat.setFinalTime(scheduler.getCurrentTime());
             try {
                 output.close();
             }
@@ -309,21 +284,14 @@ public class TCPrecver{
                 System.out.println("file not properly closed");
             }
         }
-            
-
     }
 
-    /**
-     * verify checksum
-     * @param segment
-     * @return
-     */
-    public boolean checksumCheck(TCPmessage segment) {
+    public boolean checksumCheck(byte[] payload) {
 
-        int oldChecksum = segment.getChecksum();
-        byte[] stream = segment.serialize();
+        ByteBuffer forChecksum = ByteBuffer.wrap(payload);
+        short oldChecksum = forChecksum.getShort(22);
 
-        ByteBuffer bb = ByteBuffer.wrap(stream);
+        ByteBuffer bb = ByteBuffer.wrap(payload);
 
         int value = 0;
         bb.putShort(22, (short)0);
@@ -346,11 +314,5 @@ public class TCPrecver{
 
     }
 
-    public int[] returnStats() {
-        int[] result = {receivedDataSize, sentDataSize, 
-                        receivedPacketCount, sentPacketCount, 
-                        invalidChecksumCount, droppedPacketCount};
-        return result;
-    }
 }
 
