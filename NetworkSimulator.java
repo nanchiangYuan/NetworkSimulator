@@ -8,16 +8,24 @@ import java.util.Arrays;
 import java.util.Random;
 import java.util.Scanner;
 
+/**
+ * A simulator that uses a discrete event scheduler to test my TCP implementation.
+ * Allows user to set their own configurations for the network, the tests, and TCP.
+ * Otherwise, there are default tests that can be run.
+ */
 public class NetworkSimulator {
 
+    // the network of links, hosts and routers
     private static SimpleNetwork network;
 
     private static String[] COMMANDS = {"run", "showconfig", "setup", "exit", "help", "setuptcp"};
 
-    private static final int DEFAULT_FILE_SIZE = 1000;           // in KB
-    private static final int DEFAULT_MTU = 1500;                // in bytes
-    private static final int DEFAULT_RECV_BUFFER_SIZE = 20;     // in number of segments
+    private static final int DEFAULT_FILE_SIZE = 1000;           // in KB, data to be used for testing TCP implementation 
+    private static final int DEFAULT_MTU = 1500;                 // in bytes, maximum transmission unit
+    private static final int DEFAULT_RECV_BUFFER_SIZE = 20;      // in number of segments, receiver buffer size
 
+    // the output file names
+    // the output files are for checking if data is transmitted perfectly
     private static final String INITIAL_FILE_NAME = "test_original.txt";
     private static final String LATENCY_FILE_NAME = "test_latency_";
     private static final String BANDWIDTH_FILE_NAME = "test_bandwidth_";
@@ -25,18 +33,22 @@ public class NetworkSimulator {
     private static final String LOSSRATE_FILE_NAME = "test_lossrate_";
     private static final String FILE_NAME_EXTENSION = ".txt";
 
+    // ID for the different tests
     private static final int LATENCY_TEST_NO = 0;
     private static final int BANDWIDTH_TEST_NO = 1;
     private static final int BUFFERSIZE_TEST_NO = 2;
     private static final int LOSSRATE_TEST_NO = 3;
 
-    private static final double[] LATENCY_STEP = {1, 5, 10, 25, 50, 100};             // by ms
-    private static final double[] BANDWIDTH_STEP = {1, 10, 30, 50, 75, 100};          // by 
-    private static final double[] BUFFERSIZE_STEP = {3, 5, 10, 30, 50, 80};               // by packets
-    private static final double[] LOSSRATE_STEP = {0.0, 0.01, 0.1, 0.5, 1, 2, 5};     // percentage
-
+    // default steps for different tests
+    private static final double[] LATENCY_STEP = {1, 5, 10, 25, 50, 100};               // by ms
+    private static final double[] BANDWIDTH_STEP = {1, 10, 30, 50, 75, 100};            // by MB
+    private static final double[] BUFFERSIZE_STEP = {3, 5, 10, 30, 50, 80};             // by packets
+    private static final double[] LOSSRATE_STEP = {0.0, 0.01, 0.1, 0.5, 1, 2, 5};       // percentage
+    
+    // the discrete event scheduler that schedules receive and timeout events
     private static Scheduler scheduler;
 
+    // a record that stores the configuration for a test
     private record TestConfig(
         short sourceID, 
         short destID, 
@@ -49,11 +61,16 @@ public class NetworkSimulator {
         double[] steps,
         int mtu, 
         int rcvBufSize, 
-        boolean verbose
+        boolean verbose     // if true, will print all of the send and receive packet event to screen
     ) {}
 
+    /**
+     * Runs the main loop
+     * @param args
+     */
     public static void main(String args[]) {
 
+        // these are default values until user changes them
         int fileSize = DEFAULT_FILE_SIZE;
         int mtu = DEFAULT_MTU;
         int rcvBufSize = DEFAULT_RECV_BUFFER_SIZE;
@@ -65,10 +82,12 @@ public class NetworkSimulator {
             String input = in.nextLine();
             String[] inputSplit = input.split("\\s+");
             
-            /*
-             * run
-             */
+            /* ============================
+             *  run
+             * ============================ */
             if(inputSplit[0].equals(COMMANDS[0])) {
+
+                // need to set network before running "run"
                 if(network == null)
                     System.out.println("Network not set, type \"help\" for list of commands.");
                 else if(inputSplit.length < 4) {
@@ -85,33 +104,42 @@ public class NetworkSimulator {
                     boolean originalLink = false;
 
                     for(int i = 1; i < inputSplit.length; i++) {
+                        // source host
                         if(inputSplit[i].equals("-s") && i+1 <= inputSplit.length) {
                             try{
                                 startID = Short.parseShort(inputSplit[i+1]);
                             } catch (NumberFormatException e) {
-                                System.out.println("-s Invalid run command, type \"help\" for list of commands.");
+                                System.out.println("Invalid run command, type \"help\" for list of commands.");
                                 continue;
                             }
                         }
+
+                        // destination host
                         if(inputSplit[i].equals("-d") && i+1 <= inputSplit.length) {
                             try{
                                 destID = Short.parseShort(inputSplit[i+1]);
                             } catch (NumberFormatException e) {
-                                System.out.println("-d Invalid run command, type \"help\" for list of commands.");
+                                System.out.println("Invalid run command, type \"help\" for list of commands.");
                                 continue;
                             }
                         }
+
+                        // file size
                         if(inputSplit[i].equals("-f") && i+1 <= inputSplit.length) {
                             try{
                                 fileSize = Short.parseShort(inputSplit[i+1]);
                             } catch (NumberFormatException e) {
-                                System.out.println("-f Invalid run command, type \"help\" for list of commands.");
+                                System.out.println("Invalid run command, type \"help\" for list of commands.");
                                 continue;
                             }
                         }
+
+                        // file name
                         if(inputSplit[i].equals("-n") && i+1 <= inputSplit.length) {
                             filename = inputSplit[i+1];
                         }
+
+                        // the test to run
                         if(inputSplit[i].equals("-t") && i+1 <= inputSplit.length) {
                             if(inputSplit[i+1].equals("latency"))
                                 testname = LATENCY_TEST_NO;
@@ -122,14 +150,16 @@ public class NetworkSimulator {
                             else if(inputSplit[i+1].equals("lossrate"))
                                 testname = LOSSRATE_TEST_NO;
                             else {
-                                System.out.println("-t Invalid run command, type \"help\" for list of commands.");
+                                System.out.println("Invalid run command, type \"help\" for list of commands.");
                                 continue;
                             }
                         }
+
+                        // range and step size
                         if(inputSplit[i].equals("-r") && i+1 <= inputSplit.length) {
                             String[] numbers = inputSplit[i+1].split(":");
                             if(numbers.length != 3) {
-                                System.out.println("-r Invalid run command, type \"help\" for list of commands.");
+                                System.out.println("Invalid run command, type \"help\" for list of commands.");
                                 continue;
                             }
 
@@ -139,34 +169,42 @@ public class NetworkSimulator {
                                 try{
                                     range[j] = Double.parseDouble(numbers[j]);
                                 } catch (NumberFormatException e) {
-                                    System.out.println("-r Invalid run command, type \"help\" for list of commands.");
+                                    System.out.println("Invalid run command, type \"help\" for list of commands.");
                                     continue;
                                 }
                             }
                             steps = getRange(range[0], range[1], range[2]);
 
                         }
+
+                        // bottleneck link
                         if(inputSplit[i].equals("-l") && i+1 <= inputSplit.length) {
                             String[] nodes = inputSplit[i+1].split(":");
                             links = findLink(nodes[0], nodes[1]);
                             if(links == null) {
-                                System.out.println("-l Invalid run command, type \"help\" for list of commands.");
+                                System.out.println("Invalid run command, type \"help\" for list of commands.");
                                 continue;
                             }
                         }
+
+                        // verbose mode
                         if(inputSplit[i].equals("-v")) {
                             verbose = true;
                         }
+
+                        // to run tests with link config from file
                         if(inputSplit[i].equals("-c")) {
                             originalLink = true;
                         }
                     }
 
-                    if(startID == -1 || destID == -1 || testname == -1) {
-                        System.out.println("aa Invalid run command, type \"help\" for list of commands.");
+                    // these are required
+                    if(startID == -1 || destID == -1 || testname == -1 || links == null) {
+                        System.out.println("Invalid run command, type \"help\" for list of commands.");
                         continue;
                     }
 
+                    // if user didn't specify range and steps, set to default
                     if(steps == null) {
                         switch(testname) {
                             case LATENCY_TEST_NO:
@@ -184,11 +222,6 @@ public class NetworkSimulator {
                         }
                     }
 
-                    if(links == null) {
-                        System.out.println("bb Invalid run command, type \"help\" for list of commands.");
-                        continue;
-                    }
-
                     if(!originalLink)
                         setDefaultLinkConfig(links, mtu);
                     else
@@ -199,17 +232,16 @@ public class NetworkSimulator {
                 }
             }
 
-            /*
-             * showconfig
-             */
+            /* ============================
+             *  showconfig
+             * ============================ */
             else if(inputSplit[0].equals(COMMANDS[1])) {
-                // print out network config
                 network.printTopo();
             }
             
-            /*
+            /* ============================
              * setup
-             */
+             * ============================ */
             else if(inputSplit[0].equals(COMMANDS[2])) {
                 if(inputSplit.length == 2) {
                     network = new SimpleNetwork(inputSplit[1], scheduler);
@@ -219,9 +251,9 @@ public class NetworkSimulator {
                 }
 
             }
-            /*
+            /* ============================
              * help
-             */
+             * ============================ */
             else if(inputSplit[0].equals(COMMANDS[4])) {
                 if(inputSplit.length == 1) {
                     System.out.println("Commands: ");
@@ -250,9 +282,9 @@ public class NetworkSimulator {
 
             }
             
-            /*
+            /* ============================
              * setuptcp
-             */
+             * ============================ */
             else if(inputSplit[0].equals(COMMANDS[5])){
                 if(inputSplit.length > 2) {
                     for(int i = 1; i < inputSplit.length; i+=2) {
@@ -260,6 +292,8 @@ public class NetworkSimulator {
                             System.out.println("Invalid setuptcp command, type \"help\" for list of commands.");
                             break;
                         }
+
+                        // mtu
                         if(inputSplit[i].equals("-m")) {
                             try{
                                 mtu = Integer.parseInt(inputSplit[i+1]);
@@ -268,6 +302,8 @@ public class NetworkSimulator {
                                 break;
                             }
                         }
+
+                        // receiver buffer size
                         if(inputSplit[i].equals("-b")) {
                             try{
                                 rcvBufSize = Integer.parseInt(inputSplit[i+1]);
@@ -284,9 +320,9 @@ public class NetworkSimulator {
 
             }
 
-            /*
+            /* ============================
              * exit
-             */
+             * ============================ */
             else if(inputSplit[0].equals(COMMANDS[3]))
                 break;
 
@@ -299,9 +335,13 @@ public class NetworkSimulator {
         in.close();
     }
 
+    /**
+     * Creats the file needed for data transmission, then runs the tests
+     * @param testConfig the record that stores configuration for test
+    */
     private static void run(TestConfig testConfig) {
-        String newFile;
 
+        String newFile;
         if(testConfig.filename == null) {
             createFile(testConfig.filesize);
             newFile = INITIAL_FILE_NAME;
@@ -314,7 +354,14 @@ public class NetworkSimulator {
 
     }
     
-
+    /**
+     * The main test running logic. Run a number of sweep tests that goes through different configuration of a specified
+     * parameter (bandwidth, latency, buffersize or loss rate) by certain step values.
+     * 
+     * @param testConfig the record that stores configuration for test
+     * @param filename the name of the original data
+     * @param testNo the ID of the test to be run
+     */
     private static void runTests(TestConfig testConfig, String filename, int testNo) {
 
         // set up file name for specific tests
@@ -334,8 +381,10 @@ public class NetworkSimulator {
                 break;
         }
 
+        // runs every test for every step
         for(int i = 0; i < testConfig.steps.length; i++) {
 
+            // set the links to be of the configuration for this current test
             configureLinks(testConfig.links, testConfig.steps, testConfig.mtu, i, testNo);
 
             printHeader(testConfig, i);
@@ -350,8 +399,10 @@ public class NetworkSimulator {
             TCPsender sender = new TCPsender(testConfig.sourceID, testConfig.destID, testConfig.sourceNode, filename, testConfig.mtu, scheduler, testConfig.verbose);
             TCPrecver receiver = new TCPrecver(testConfig.destID, testConfig.sourceID, testConfig.destNode, outputFilename, testConfig.mtu, testConfig.rcvBufSize, scheduler, testConfig.verbose); 
 
+            // initialize the links, make sure old values don't carry over to new tests
             setUpLink();
-    
+
+            // starts the connctions
             receiver.listen();
             sender.initConnection();    // only sends first handshake
 
@@ -367,38 +418,43 @@ public class NetworkSimulator {
                     }
                     else if(currEvent.getDestination().getID() == testConfig.sourceID) {
                         sender.receive(currEvent.getPacket());
-                        // if ack for threeway handshake is received, start sending packets, done in TCPsender
                     }
                     // otherwise, just send packet down to the next node
                     else {
                         currEvent.getDestination().send(currEvent.getPacket());
                     }
                 }
-
+                
+                // to check timeout
                 if(currEvent.getType() == Event.EventType.TIMEOUT_CHECK) {
                     sender.checkTimeout(currEvent.getSequenceNo());
-                    // get a data structure from sender that records if a packet received an ack
-                    // if received, just continue, if not, send packet again
                 }
             }
 
-            
             if(testConfig.verbose)
                 System.out.println("End of Trace");
             System.out.println();
+
             sender.getStat().printStat();
             System.out.println();
             receiver.getStat().printStat();
             System.out.println();
+
+            // calculates and prints the final statistics
             TCPFinalStat finalStat = new TCPFinalStat(sender.getStat(), receiver.getStat());
             finalStat.printFinalStat();
             System.out.println();
+
+            // make sure data is perfectly transferred over
             if(!checkFile(filename, outputFilename))
                 System.out.println("!!! file transfer failed: files are not the same !!!");
         }
         
     }
 
+    /**
+     * To set up the links before a test, also make sure no old data is carried over
+     */
     private static void setUpLink() {
         for(Link link: network.getLinks()) {
             link.setScheduler(scheduler);
@@ -406,12 +462,24 @@ public class NetworkSimulator {
         }
     }
 
+    /**
+     * Resets the links to the configuration from the file.
+     */
     private static void resetLinks() {
         for(Link link: network.getLinks()) {
             link.resetConfig();
         }
     }
 
+    /**
+     * Update the links according to the test it is going to run.
+     * 
+     * @param links the bottleneck links
+     * @param steps the steps array
+     * @param mtu mtu
+     * @param index the index of the test
+     * @param testNo the ID of the test to be run
+     */
     private static void configureLinks(Link[] links, double[] steps, int mtu, int index, int testNo) {
         switch(testNo) {
             case LATENCY_TEST_NO:
@@ -436,6 +504,10 @@ public class NetworkSimulator {
         }
     }
 
+    /**
+     * Creates a file of random data.
+     * @param filesize the size of the output file
+     */
     private static void createFile(int filesize) {
         try{
             FileOutputStream f = new FileOutputStream(INITIAL_FILE_NAME);
@@ -450,9 +522,17 @@ public class NetworkSimulator {
 
     }
 
+    /**
+     * Get the link from start and end nodes.
+     * @param n1 node 1
+     * @param n2 node 2
+     * @return the link (because links are one-directional, so need 2)
+     */
     private static Link[] findLink(String n1, String n2) {
         Node node1 = null;
         Node node2 = null;
+
+        // first find the nodes from network
         for(Node node: network.getHosts()) {
             if(node.getName().equals(n1))
                 node1 = node;
@@ -484,6 +564,13 @@ public class NetworkSimulator {
         return targetLink;
     }
 
+    /**
+     * Get the steps array from a
+     * @param start
+     * @param end
+     * @param step
+     * @return
+     */
     public static double[] getRange(double start, double end, double step) {
 
         int testCount = (int) Math.ceil((end - start) / step);
