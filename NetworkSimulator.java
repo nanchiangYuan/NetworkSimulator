@@ -18,7 +18,7 @@ public class NetworkSimulator {
     // the network of links, hosts and routers
     private static SimpleNetwork network;
 
-    private static String[] COMMANDS = {"run", "showconfig", "setup", "exit", "help", "setuptcp"};
+    private static String[] COMMANDS = {"run", "showconfig", "setup", "exit", "help"};
 
     private static final int DEFAULT_FILE_SIZE = 1000;           // in KB, data to be used for testing TCP implementation 
     private static final int DEFAULT_MTU = 1500;                 // in bytes, maximum transmission unit
@@ -70,10 +70,11 @@ public class NetworkSimulator {
      */
     public static void main(String args[]) {
 
-        // these are default values until user changes them
         int fileSize = DEFAULT_FILE_SIZE;
-        int mtu = DEFAULT_MTU;
+
+        // users can't change these, but just in case I want to add that function I'll leave this as is
         int rcvBufSize = DEFAULT_RECV_BUFFER_SIZE;
+        int mtu = DEFAULT_MTU;         
 
         Scanner in = new Scanner(System.in);
 
@@ -270,52 +271,11 @@ public class NetworkSimulator {
                     System.out.println("              -n name of file to be sent (if none provided, will create one)");
                     System.out.println("              -c run tests with original link configs");
                     System.out.println("              -v verbose mode");
-                    System.out.println("  3. settcp: sets some parameters for TCP");
-                    System.out.println("              -m sets maximum transmission unit in bytes");
-                    System.out.println("              -b sets receiver buffer size in segments");
-                    System.out.println("  4. showconfig: shows the configuration of the network and topology");
-                    System.out.println("  5. exit: exits the emulator");
+                    System.out.println("  3. showconfig: shows the configuration of the network and topology");
+                    System.out.println("  4. exit: exits the emulator");
                 }
                 else {
                     System.out.println("Invalid help command, type \"help\" for list of commands.");
-                }
-
-            }
-            
-            /* ============================
-             * setuptcp
-             * ============================ */
-            else if(inputSplit[0].equals(COMMANDS[5])){
-                if(inputSplit.length > 2) {
-                    for(int i = 1; i < inputSplit.length; i+=2) {
-                        if(i+1 > inputSplit.length) {
-                            System.out.println("Invalid setuptcp command, type \"help\" for list of commands.");
-                            break;
-                        }
-
-                        // mtu
-                        if(inputSplit[i].equals("-m")) {
-                            try{
-                                mtu = Integer.parseInt(inputSplit[i+1]);
-                            } catch (NumberFormatException e) {
-                                System.out.println("Invalid setuptcp command, type \"help\" for list of commands.");
-                                break;
-                            }
-                        }
-
-                        // receiver buffer size
-                        if(inputSplit[i].equals("-b")) {
-                            try{
-                                rcvBufSize = Integer.parseInt(inputSplit[i+1]);
-                            } catch (NumberFormatException e) {
-                                System.out.println("Invalid setuptcp command, type \"help\" for list of commands.");
-                                break;
-                            }
-                        }
-                    }
-                }
-                else {
-                    System.out.println("invalid setup command");
                 }
 
             }
@@ -565,11 +525,12 @@ public class NetworkSimulator {
     }
 
     /**
-     * Get the steps array from a
-     * @param start
-     * @param end
-     * @param step
-     * @return
+     * Get the steps for sweep test from values from input.
+     * 
+     * @param start start of the range
+     * @param end end of the range
+     * @param step the amount to increase every step
+     * @return an array of calculated values within the range incremented by step value
      */
     public static double[] getRange(double start, double end, double step) {
 
@@ -583,6 +544,12 @@ public class NetworkSimulator {
         return steps;
     }
 
+    /**
+     * Configure the links to have default values.
+     * 
+     * @param bottleneckLinks the link that act as the bottlebeck for the network (two directions of the same link)
+     * @param mtu 
+     */
     public static void setDefaultLinkConfig(Link[] bottleneckLinks, int mtu) {
 
         for(Link link: network.getLinks()) {
