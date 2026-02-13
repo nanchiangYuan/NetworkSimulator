@@ -7,7 +7,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 
 /**
- * TCP sender class
+ * TCP node that sends data over the network.
  */
 public class TCPsender {
 
@@ -21,46 +21,40 @@ public class TCPsender {
     private int expRcvNo;               // the expected sequence to get from receiver
     private Scheduler scheduler;
 
-    private HashMap<Integer, TCPmessage> buffer;
-    private int lastAck;    // the index of expected seq from receiver (need to multiply by mss to get sequence number)
-    private int lastSent;   // the index of the last sent seq (need to multiply by mss to get sequence number)
-    private int dupAcks;
-    private int lastLength;
+    private HashMap<Integer, TCPmessage> buffer;    // the buffer where the sender puts its data to be sent
+    private int lastAck;                // the index of expected seq from receiver
+    private int lastSent;               // the index of the last sent seq
+    private int dupAcks;                // number of duplicate acks
+    private int lastLength;             // length of the previous packet
 
-    private State state;
-    private RenoState reno;
-    private double ssthresh;
+    private State state;                // current state the sender is in
+    private RenoState reno;             // state for congestion control
+    private double ssthresh;            // slow start threshold
 
-    private Node node = null;
+    private Node node = null;           // the node this sender is on
 
-    private FileInputStream fileIn;
+    private FileInputStream fileIn;     // stream to read the file from
 
-    private boolean fileDone = false;
+    private boolean fileDone = false;   // keep track of whether the file is done buffering
     
-    // for timeout
-    private double timeout;
-    private double ertt;        // estimated rtt
-    private double edev = 0.0;      // estimated deviation
-    private double timeoutCoA = 0.875;  // coefficient a
-    private double timeoutCoB = 0.75;   // coefficient b
-    private double GRANULARITY = 1.0;
-    private double MIN_RTO = 20.0;
+    private double timeout;             // current timeout time
+    private double ertt;                // estimated rtt
+    private double srtt;                // smoothed round trip time
+    private double edev = 0.0;          // estimated deviation
+    private double timeoutCoA = 0.125;  // coefficient a
+    private double timeoutCoB = 0.25;   // coefficient b
+    private double rttvar;              // 
+    private double GRANULARITY = 1.0;   //
+    private double MIN_RTO = 1000.0;      // minimum retransmission timeout
 
-    // for final stats
-    private int sentDataSize = 0;
-    private int sentPacketCount = 0;
-    private int receivedDataSize = 0;
-    private int receivedPacketCount = 0;
-    private int retransmissionCount = 0;
-    private int dupAckCount = 0;
-
-    private double segmentLifetime = 60000.0; // in ms, 60 sec
+    private double segmentLifetime = 60000.0;   // in ms, 60 sec
     
-    private boolean verbose;
-    private TCPStat stat;
+    private boolean verbose;            // whether to print every packet sent or received 
+    private TCPStat stat;               // holds all the stats
 
-    private int bufferSize;
+    private int bufferSize;             // size of the data buffer
 
+    // state for TCP reno
     public static enum RenoState {
         SLOW_START,
         CONGESTION_AVOIDANCE,
@@ -68,12 +62,14 @@ public class TCPsender {
     }
 
     /**
-     * Constructor 
+     * Constructor
      * @param sID source ID
      * @param dID destination ID
-     * @param fn input file name
-     * @param m mtu in bytes
-     * @param s sliding window size in segments
+     * @param node the node the sender is on
+     * @param fn file name of the data to be sent over
+     * @param m mtu
+     * @param sched scheduler
+     * @param v verbose
      */
     TCPsender(short sID, short dID, Node node, String fn, int m, Scheduler sched, boolean v) {
 
@@ -97,7 +93,7 @@ public class TCPsender {
         this.ssthresh = 64; // random large number that is 2^n
         this.bufferSize = 65535 / mss;
 
-        this.timeout = 5000.0; // 5 seconds
+        this.timeout = 1000.0; // 1 second
         this.verbose = v;
         this.stat = new TCPStat("sender");
     }
@@ -140,8 +136,9 @@ public class TCPsender {
         buffer.remove(sequenceNo-1);
 
         // calculate first value for timeout
-        ertt = scheduler.getCurrentTime() - message.getTimestamp();
-        timeout = ertt * 2.0;
+        srtt = scheduler.getCurrentTime() - message.getTimestamp();
+        rttvar = srtt / 2.0;
+        timeout = srtt + Math.max(GRANULARITY, 4 * rttvar);
         
         int inSeqNO = message.getSequenceNo();
         
@@ -384,16 +381,17 @@ public class TCPsender {
      */
     public void recalculateTimeout(double dataTime) {
         double current = scheduler.getCurrentTime();
-        double srtt = current - dataTime;
-        double sdev = Math.abs(srtt - ertt);
-        ertt = timeoutCoA * ertt + (1 - timeoutCoA) * srtt;
-        edev = timeoutCoB * edev + (1 - timeoutCoB) * sdev;
-        timeout = ertt + Math.max(GRANULARITY, 4 * edev);
+        double tempR = current - dataTime;
+
+        rttvar = (1 - timeoutCoB) * rttvar + timeoutCoB * Math.abs(srtt - tempR);
+        srtt = (1 - timeoutCoA) * srtt + timeoutCoA * tempR;
+
+        timeout = srtt + Math.max(GRANULARITY, 4 * rttvar);
 
         if(timeout < MIN_RTO)
             timeout = MIN_RTO;
 
-        stat.addRTT(srtt);
+        stat.addRTT(tempR);
     }
 
     /** 
