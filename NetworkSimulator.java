@@ -548,7 +548,7 @@ public class NetworkSimulator {
      * Configure the links to have default values.
      * 
      * @param bottleneckLinks the link that act as the bottlebeck for the network (two directions of the same link)
-     * @param mtu 
+     * @param mtu mtu
      */
     public static void setDefaultLinkConfig(Link[] bottleneckLinks, int mtu) {
 
@@ -569,6 +569,12 @@ public class NetworkSimulator {
         }
     }
 
+    /**
+     * B to KB to MB
+     * 
+     * @param num the number to convert, in bytes
+     * @return a string of either "num B", "num KB" or "num MB"
+     */
     private static String convert(double num) {
         if(num / 1000.0 > 1.0) {
             num /= 1000.0;
@@ -581,6 +587,13 @@ public class NetworkSimulator {
 
     }
 
+    /**
+     * Verify if the file sent through the network is the exact same as the original.
+     * 
+     * @param fileName1 a file
+     * @param fileName2 a file to compare against
+     * @return true if same, false if not
+     */
     private static boolean checkFile(String fileName1, String fileName2) {
 
         try {
@@ -616,6 +629,12 @@ public class NetworkSimulator {
         return true;
     }
 
+    /**
+     * Prints the header of every test.
+     * 
+     * @param testConfig test configurations
+     * @param index the index of the current test
+     */
     private static void printHeader(TestConfig testConfig, int index) {
 
         int headerLength = 64;
@@ -632,29 +651,22 @@ public class NetworkSimulator {
         switch(testConfig.testName) {
             case 0:
                 title = "Latency Test " + index + " (" + testConfig.links[0].getLatency() + " ms)";
-                int len = title.length();
-                int spacesLen = (headerLength - len) / 2;
-                title = spaces.repeat(spacesLen) + title + spaces.repeat(spacesLen);
                 break;
             case 1:
                 title = "Bandwidth Test " + index + " (" + testConfig.links[0].getBandwidth() + " Mbps)";
-                len = title.length();
-                spacesLen = (headerLength - len) / 2;
-                title = spaces.repeat(spacesLen) + title + spaces.repeat(spacesLen);
                 break;
             case 2:
                 title = "Buffer Size Test " + index + " (" + convert(testConfig.links[0].getBufferSize()) + ")";
-                len = title.length();
-                spacesLen = (headerLength - len) / 2;
-                title = spaces.repeat(spacesLen) + title + spaces.repeat(spacesLen);
                 break;
             case 3:
                 title = "Loss Rate Test " + index + " (" + testConfig.links[0].getLossRate() + "%)";
-                len = title.length();
-                spacesLen = (headerLength - len) / 2;
-                title = spaces.repeat(spacesLen) + title + spaces.repeat(spacesLen);
                 break;
         }
+
+        int len = title.length();
+        int spacesLen = (headerLength - len) / 2;
+        title = spaces.repeat(spacesLen) + title + spaces.repeat(spacesLen);
+
         System.out.println(title);
         System.out.println(separator);
 
