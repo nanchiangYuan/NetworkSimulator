@@ -1,19 +1,28 @@
+/**
+ * A class for defining what an event is.
+ */
 public class Event implements Comparable<Event>{
 
-    private SimplePacket packet;
-    private int seqNo;
-    private int length;
+    private SimplePacket packet;    // the packet related to this event
+    private int seqNo;              // the sequence number of the packet
+    private int length;             // the length of the packet
     private EventType type;
-    private double time;        // the time this event is happening at
-    private Node destination;   // the arrival node (not necessarily the end destination, just the next node on the link), null for timeout check
+    private double time;            // the time this event is happening at
+    private Node destination;       // the arrival node (not necessarily the end destination, just the next node on the link)
 
     public static enum EventType {
-        ARRIVE,
-        TIMEOUT_CHECK,
-        TIME_WAIT
+        ARRIVE,             // for when a packet arrives at a node
+        TIMEOUT_CHECK,      // for checking timeouts
+        TIME_WAIT           // for termination
     }
 
-    // for arrive
+    /**
+     * Constructor for arrival events
+     * @param packet the packet arriving
+     * @param type the Event type
+     * @param time the scheduled time
+     * @param dest the destination node (the immediate node it is arriving at)
+     */
     Event(SimplePacket packet, EventType type, double time, Node dest) {
         this.packet = packet;
         this.type = type;
@@ -21,14 +30,23 @@ public class Event implements Comparable<Event>{
         this.destination = dest;
     }
 
-    // for timeout
+    /**
+     * Constructor for timeout events
+     * @param oldestSequenceNo the oldest packet sequence number that hasn't been acked
+     * @param type the Event type
+     * @param timeout the time where the timeout is reached
+     */
     Event(int oldestSequenceNo, EventType type, double timeout) {
         this.seqNo = oldestSequenceNo;
         this.type = type;
         this.time = timeout;
     }
 
-    // for time wait
+    /**
+     * Contructor for time wait
+     * @param type the Event type
+     * @param time the time to wait in this state
+     */
     Event(EventType type, double time) {
         this.type = type;
         this.time = time;
@@ -56,22 +74,6 @@ public class Event implements Comparable<Event>{
 
     public int getLength() {
         return this.length;
-    }
-
-    /**
-     * 
-     * @return event to add onto queue (timeout mostly)
-     */
-    public Event execute() {
-        if(this.type == EventType.ARRIVE) {
-            // if arrival node is dest node, do TCP receiver logic (remove infinite loop)
-            // and add timeout check event onto queue
-            // else pass down packet by doing node.send
-        }
-        else if(this.type == EventType.TIMEOUT_CHECK) {
-
-        }
-        return null;
     }
 
     @Override
