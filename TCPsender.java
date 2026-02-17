@@ -38,21 +38,19 @@ public class TCPsender {
     private boolean fileDone = false;   // keep track of whether the file is done buffering
     
     private double timeout;             // current timeout time
-    private double ertt;                // estimated rtt
     private double srtt;                // smoothed round trip time
-    private double edev = 0.0;          // estimated deviation
     private double timeoutCoA = 0.125;  // coefficient a
     private double timeoutCoB = 0.25;   // coefficient b
-    private double rttvar;              // 
-    private double GRANULARITY = 1.0;   //
-    private double MIN_RTO = 1000.0;      // minimum retransmission timeout
+    private double rttvar;              // round trip time variance
+    private double GRANULARITY = 1.0;   // clock granularity
+    private double MIN_RTO = 1000.0;    // minimum retransmission timeout
 
     private double segmentLifetime = 60000.0;   // in ms, 60 sec
     
     private boolean verbose;            // whether to print every packet sent or received 
     private TCPStat stat;               // holds all the stats
 
-    private int bufferSize;             // size of the data buffer
+    private int bufferSize;             // size of the data buffer in packets
 
     // state for TCP reno
     public static enum RenoState {
@@ -88,23 +86,28 @@ public class TCPsender {
         this.expRcvNo = 0;
         this.dupAcks = 0;
         this.scheduler = sched;
-        this.state = State.CLOSED;
-        this.reno = RenoState.SLOW_START;
-        this.ssthresh = 64; // random large number that is 2^n
+
+        this.ssthresh = 64;                 // random large number that is 2^n
         this.bufferSize = 65535 / mss;
 
-        this.timeout = 1000.0; // 1 second
+        this.timeout = 1000.0;              // 1 second
         this.verbose = v;
         this.stat = new TCPStat("sender");
+
+        this.state = State.CLOSED;
+        this.reno = RenoState.SLOW_START;
     }
 
+    /**
+     * Retrieve the TCPStat object for this sender
+     * @return the TCPStat object
+     */
     public TCPStat getStat() {
         return stat;
     }
 
     /**
      * Sends the first packet to initialize threeway handshake
-     * @return succeed or not
      */
     public void initConnection() {
 
@@ -119,20 +122,27 @@ public class TCPsender {
 
         // send segment
         sendPacket(init);
+        // put segment into buffer
         buffer.put(sequenceNo, init);
+        // set timeout in the scheduler
         scheduler.setTimer(sequenceNo, timeout);
 
         state = State.SYN_SENT;
         sequenceNo += 1;
     }
 
+    /**
+     * The second part of threeway handshake
+     * @param message the ack from the receiver
+     */
     public void initWaitForAck(TCPmessage message) {
 
         if(!message.isSYN() || !message.isACK() || message.getAcknowledgment() != sequenceNo) {
             System.out.println("sender: init received wrong info");
             return;
         }
-
+        
+        // if ack received, the first packet can be removed from buffer
         buffer.remove(sequenceNo-1);
 
         // calculate first value for timeout
@@ -155,7 +165,7 @@ public class TCPsender {
         state = State.ESTABLISHED;
         lastSent = init2.getSequenceNo();
 
-        // prepare the fiel to be sent
+        // prepare the file to be sent
         try{
             File file = new File(filename);
             fileIn = new FileInputStream(file);
@@ -170,22 +180,23 @@ public class TCPsender {
     /**
      * Runs receive logic depending on which state the node is currently in. 
      * @param packet the packet received by node
-     * @return
      */
     public void receive(SimplePacket packet) {
 
+        // if checksum check failed, discard packet
         if(!checksumCheck(packet.getPayload())) {
             stat.addInvalidChecksum(1);
             return;
         }
             
-
+        // retrieve message from packet
         TCPmessage message = new TCPmessage(0, 0, 0, 0);
         message = message.deserialize(packet.getPayload());
 
         stat.addReceivedData(1, message.getLength());
         stat.printPackets(message, "rcv", scheduler.getCurrentTime(), verbose);
         
+        // based on state, execute different logic
         switch(state) {
             case State.SYN_SENT:
                 initWaitForAck(message);
@@ -206,9 +217,15 @@ public class TCPsender {
 
     }
 
+    /**
+     * The main method processes received packets and checks if received segments are new acks or duplicates
+     * @param message the received segment
+     */
     public void processPacket(TCPmessage message) {
-        // just ack messages
+
+        // only accepting acks
         if(message.isACK()) {
+            // timeout is recalculated every time
             recalculateTimeout(message.getTimestamp());
             int recvdAckNo = message.getAcknowledgment();
             int recvdSeq = message.getSequenceNo();
@@ -216,11 +233,13 @@ public class TCPsender {
 
             // check if the receiver expected the correct ack, which is ones after lastAck
             if(recvdAckNo > lastAck) {
+                // remove all entries in buffer that has a smaller sequence number because they are essentially acked here
                 buffer.entrySet().removeIf(entry -> entry.getKey() < recvdAckNo);
                 reno = RenoState.CONGESTION_AVOIDANCE;
                 lastAck = recvdAckNo;
                 dupAcks = 0;
                 calculateCongestionWindow();
+
                 sendData();
                 scheduler.setTimer(recvdAckNo, timeout);
 
@@ -235,7 +254,7 @@ public class TCPsender {
                 dupAcks++;
                 stat.addDupAck(1);
 
-                // fast retransmission
+                // fast retransmission when received 3 duplicate acks
                 if(dupAcks == 2) {
                     sendPacket(buffer.get(recvdAckNo));
 
@@ -254,23 +273,16 @@ public class TCPsender {
                     int count = sendData();
                     stat.addRetransmissionCount(count);
                 }
-            } else {
-                // ignore
-            }
-            // 3. if not, mark in ackList, if ack is > 3, fast retransmit of previous (need to somehow restart timeout)
-            //    ssthresh = cwnd, cwnd = ssthresh / 2, if next ack is new, congestion avoidance, if not(more dup ack), fast recovery
-
-            
+            }             
         }
     }
-    
-
 
     /**
-     * recalculate congestion window upon receiving an ack
+     * Recalculate congestion window upon receiving an ack
      */
     private void calculateCongestionWindow() {
-        // System.out.println("reno state: " + reno);
+
+        // different methods when in different states
         switch(reno) {
             case RenoState.SLOW_START:
                 cwnd++;
@@ -284,13 +296,14 @@ public class TCPsender {
                 cwnd++;
                 break;
         }
+
         stat.addCwnd(cwnd);
 
     }
 
     /** 
-     * The data in the file is all put into the buffer first 
-    */
+     * To put data into send buffer
+     */
     private void dataIntoBuffer() {
 
         if(fileDone)
@@ -299,7 +312,7 @@ public class TCPsender {
         try{
             byte[] segment = new byte[mss];
 
-            // put all segments into buffer
+            // put segments into buffer until buffer is full
             while(buffer.size() < bufferSize) {
                 int segLength = fileIn.read(segment);
                 if(segLength < 0) {
@@ -323,16 +336,10 @@ public class TCPsender {
             System.out.println("Error when reading file");
         }
 
-        // System.out.println("######### buffer #########");
-        // for(Map.Entry<Integer, TCPmessage> entry: buffer.entrySet()) {
-        //     System.out.println(entry.getKey() + ", " + entry.getValue());
-        // }
-        // System.out.println("##########################");
-
     }
 
     /**
-     * 
+     * Sends data until congestion window is reached
      * @return the number of packets sent
      */
     private int sendData() {
@@ -343,15 +350,16 @@ public class TCPsender {
         }
         dataIntoBuffer();
         calculateCongestionWindow();
-        // System.out.println("cwnd: " + cwnd);
         int count = 0;
+
+        // sends until buffer is empty or congestion window reached
         while(!buffer.isEmpty() && lastSent - lastAck <= (cwnd * mss)) {
+            // make sure the packet we want to send has been put into the buffer
             int lastSentCheck = lastSent + lastLength;
             if(lastSentCheck >= sequenceNo)
                 break;
-            // System.out.println("lastLength: " + lastLength);
-            // System.out.println("lastSent: " + lastSent);
-            lastSent+=lastLength;
+
+            lastSent += lastLength;
             TCPmessage toBeSent = buffer.get(lastSent);
             lastLength = toBeSent.getLength();
             sendPacket(toBeSent);
@@ -361,7 +369,10 @@ public class TCPsender {
         return count;
 
     }
-
+    /**
+     * Helps setting up a packet then sends it.
+     * @param message the packet to be sent
+     */
     private void sendPacket(TCPmessage message) {
 
         message.setAcknowledgment(expRcvNo); // expected seqNo from receiver will be different, build packet only when sending
@@ -376,8 +387,9 @@ public class TCPsender {
     }
 
     /**
-     * recalculate timeout for every ack
-     * @param dataTime
+     * Recalculate timeout for every ack. Used RFC 6298.
+     * Source: https://datatracker.ietf.org/doc/html/rfc6298
+     * @param dataTime The timestamp in the ack received
      */
     public void recalculateTimeout(double dataTime) {
         double current = scheduler.getCurrentTime();
@@ -395,7 +407,7 @@ public class TCPsender {
     }
 
     /** 
-     * terminate connection three way hand shake
+     * Start the termination connection, three way hand shake.
     */
     public void terminateConnection() {
         TCPmessage finMessage = new TCPmessage(sequenceNo, expRcvNo, 0, scheduler.getCurrentTime());
@@ -406,7 +418,7 @@ public class TCPsender {
         sequenceNo++;
     }   
     /** 
-     * response for terminate connection, send back an ack
+     * Response for termination, send back an ack
     */
     public void terminateConnectionResponse() {
 
@@ -422,7 +434,7 @@ public class TCPsender {
     }
     
     /**
-     * make sure no segment in the buffer stay beyond timeout
+     * Checks if the oldest sequence number timed out. If so, resend it.
      */
     public void checkTimeout(int oldestSeqNo) {
 
@@ -438,6 +450,12 @@ public class TCPsender {
         stat.addRetransmissionCount(1);
     }
 
+    /**
+     * Checks if the data received is corrupted.
+     * Code partly from UW Madison CS640 2025 Fall Labs
+     * @param payload The byte sequence of the payload of packet
+     * @return true if no corruption, false otherwise
+     */
     public boolean checksumCheck(byte[] payload) {
 
         ByteBuffer forChecksum = ByteBuffer.wrap(payload);
