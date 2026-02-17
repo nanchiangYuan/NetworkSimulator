@@ -357,7 +357,7 @@ public class NetworkSimulator {
 
             scheduler = new Scheduler();
             TCPsender sender = new TCPsender(testConfig.sourceID, testConfig.destID, testConfig.sourceNode, filename, testConfig.mtu, scheduler, testConfig.verbose);
-            TCPrecver receiver = new TCPrecver(testConfig.destID, testConfig.sourceID, testConfig.destNode, outputFilename, testConfig.mtu, testConfig.rcvBufSize, scheduler, testConfig.verbose); 
+            TCPrecver receiver = new TCPrecver(testConfig.destID, testConfig.sourceID, testConfig.destNode, outputFilename, testConfig.rcvBufSize, scheduler, testConfig.verbose); 
 
             // initialize the links, make sure old values don't carry over to new tests
             setUpLink();

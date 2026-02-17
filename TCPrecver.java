@@ -6,7 +6,7 @@ import java.util.HashMap;
 
 
 /**
- * Class for receiver
+ * TCP node that receives data over the network.
  */
 public class TCPrecver{
     private String filename;            // output file
