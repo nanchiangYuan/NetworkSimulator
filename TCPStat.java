@@ -1,5 +1,8 @@
 import java.util.ArrayList;
 
+/**
+ * A class to track statistics of a test
+ */
 public class TCPStat {
 
     private int sentDataSize = 0;           // in bytes
@@ -13,13 +16,13 @@ public class TCPStat {
     private int droppedPacketCount = 0;
 
     private ArrayList<Double> rtt;          // all rtt times
-    private ArrayList<Double> cwnd;         // all cwnd size
+    private ArrayList<Double> cwnd;         // all congestion window sizes
     private int timeoutCount = 0;
     private int fastRetransmitCount = 0;
 
-    private double finalTime;
+    private double finalTime;               // in ms
 
-    private int mode;   // 0: sender, 1: receiver
+    private int mode;                       // 0: sender, 1: receiver
 
     TCPStat(String mode) {
         if(mode.equals("sender"))
@@ -106,7 +109,13 @@ public class TCPStat {
     public double getFinalTime() {
         return finalTime;
     }
-
+    /**
+     * Prints the sent or received packet info, including flags, squence number, size, acknowledgement.
+     * @param message the packet received or sent
+     * @param sndRcv specifies if this is the sneder or receiver
+     * @param time the current time in ms
+     * @param verbose whether to print or not
+     */
     public void printPackets(TCPmessage message, String sndRcv, double time, boolean verbose) {
 
         if(!verbose)
@@ -158,6 +167,9 @@ public class TCPStat {
         System.out.println(output.toString());
     }
 
+    /**
+     * Prints the stats recorded in this object (usually done after a test).
+     */
     public void printStat() {
         switch(mode) {
             case 0:
@@ -179,6 +191,11 @@ public class TCPStat {
         }
     }
 
+    /**
+     * Converts the number of bytes into MB or KB
+     * @param num the number of bytes
+     * @return the string after converting
+     */
     private String convert(double num) {
         if(num / 1000.0 > 1.0) {
             num /= 1000.0;
