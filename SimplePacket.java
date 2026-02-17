@@ -1,6 +1,6 @@
 /**
  * A simple packet class that acts like datagram packets without checksum.
- * Not implementing checksum to overcomplicate the emulator, but added the fields just in case.
+ * Checksum is otherwise checked at TCP segment level.
  * 
 */
 public class SimplePacket {
@@ -12,6 +12,12 @@ public class SimplePacket {
 
     public final static short HEADER_LENGTH = 8; // in bytes
 
+    /**
+     * Constructor for the packet.
+     * @param source the node where this is from
+     * @param dest the node this is going to
+     * @param payload the payload it is carrying
+     */
     SimplePacket(short source, short dest, byte[] payload) {
         this.sourceID = source;
         this.destID = dest;
@@ -53,6 +59,10 @@ public class SimplePacket {
         return "[s: "+sourceID+", d: "+destID+", len: "+length+"]";
     }
 
+    /**
+     * Creates a duplicate object
+     * @return the cloned object
+     */
     public SimplePacket clone() {
         SimplePacket cloned = new SimplePacket(sourceID, destID, payload);
         return cloned;
