@@ -1,9 +1,12 @@
 import java.util.ArrayList;
 
+/**
+ * A class that calculates all the statistics recorded from the tests and print them out.
+ */
 public class TCPFinalStat {
 
     private TCPStat senderStat;
-    private TCPStat receiverStat;
+    private TCPStat receiverStat;   // not used, but left in just in case
     private double finalTime;       // time is in ms
 
     private double throughput;
@@ -11,6 +14,11 @@ public class TCPFinalStat {
     private double avgRTT;
     private double avgCWND;
 
+    /**
+     * Constructor
+     * @param senderStat TCPStat object from sender
+     * @param receiverStat TCPStat object from receiver
+     */
     TCPFinalStat(TCPStat senderStat, TCPStat receiverStat) {
         this.senderStat = senderStat;
         this.receiverStat = receiverStat;
@@ -23,8 +31,9 @@ public class TCPFinalStat {
         this.avgCWND = calculateAvg(senderStat.getCwnd());
     }
 
-
-
+    /**
+     * Prints the final statistics of a test to console.
+     */
     public void printFinalStat() {
         System.out.println("Final Stat: ");
         System.out.printf("    Total Time:                                        %.3f sec\n", finalTime * 0.001);
@@ -36,6 +45,9 @@ public class TCPFinalStat {
         System.out.printf("    Total Fast Retransmissions:                        %d\n", senderStat.getFastRetransmit());
     }
 
+    /**
+     * Helper to calculate the average of an array.
+     */
     private double calculateAvg(ArrayList<Double> array) {
 
         double sum = 0.0;
