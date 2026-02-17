@@ -1,31 +1,45 @@
 import java.util.Arrays;
 import java.util.Random;
 
+/**
+ * A class for links in a network
+ */
 public class Link {
-    private double bandwidth; // in bits
-    private double latency; // in ms
-    private double bufferSize; // in B
+    private double bandwidth;           // in Mbps
+    private double latency;             // in ms
+    private double bufferSize;          // in B, implemented here to have the logic along with bandwidth, latency, etc together
     private double lossRate;
     private double corruptionRate;
 
     private double nextAvailableTime;
 
-    private int id;     // for debugging
-    private static int idPool = 0;
+    private int id;                     // for debugging
+    private static int idPool = 0;      // keeping track of the IDs used
 
     private Scheduler scheduler;
     private Node fromNode;
     private Node toNode;
 
-    private double fullBufferTime;
+    private double fullBufferTime;      // using time to measure if the buffer is full or not (ie whether a packet can be sent)
 
-    private double bandwidthFromFile;
+    // saving the configurations from topology file
+    private double bandwidthFromFile;   
     private double latencyFromFile;
     private double bufferSizeFromFile;
     private double lossRateFromFile;
 
+    /**
+     * The constructor
+     * @param n1 from node
+     * @param n2 to node
+     * @param bufferSize size of the buffer
+     * @param bandwidth bandwidth of this link
+     * @param latency latency of this link
+     * @param lossrate lossrate of this link
+     * @param scheduler the scheduler for this network
+     */
     Link(Node n1, Node n2, double bufferSize, double bandwidth, double latency, double lossrate, Scheduler scheduler) {
-        this.bandwidth = bandwidth;     // in Mbps
+        this.bandwidth = bandwidth;     
         this.latency = latency;
         this.bufferSize = bufferSize;
         this.lossRate = lossrate;
@@ -33,7 +47,7 @@ public class Link {
         this.fromNode = n1;
         this.toNode = n2;
         this.scheduler = scheduler;
-        this.fullBufferTime = (this.bufferSize * 8.0) / (this.bandwidth * 1000000.0) * 1000.0;
+        this.fullBufferTime = (this.bufferSize * 8.0) / (this.bandwidth * 1000000.0) * 1000.0;  // in ms
         this.id = idPool;
         this.lossRate = 0.0;
         this.corruptionRate = 0.01;
@@ -98,11 +112,17 @@ public class Link {
         lossRate = rate;
     }
 
+    /**
+     * Reset the values that's involved in a test
+     */
     public void reset() {
         nextAvailableTime = 0.0;
         fullBufferTime = (this.bufferSize * 8.0) / (this.bandwidth * 1000000.0) * 1000.0;
     }
 
+    /**
+     * Reload the configurations from topology
+     */
     public void resetConfig() {
         bandwidth = bandwidthFromFile;
         latency = latencyFromFile;
@@ -119,13 +139,13 @@ public class Link {
     }
 
     /**
-     * 
-     * @param packet
-     * @param source
-     * @return false if dropping a packet, true if no error 
+     * Main logic for link. Calculates the amount of time needed to send a packet through this link, then schedules
+     * an arrival event (which has the packet arrive at the next node).
+     * @param packet the packet to be sent
      */
     public void send(SimplePacket packet) {
 
+        // just drop packet
         if(lossRate > 0.0) {
             Random rand = new Random();
             double prob = rand.nextDouble() * 100.0;
@@ -134,6 +154,7 @@ public class Link {
                 return;            
         }
 
+        // randomly flip some bytes
         if(corruptionRate > 0.0) {
             Random rand = new Random();
             double prob = rand.nextDouble() * 100.0;
@@ -152,9 +173,12 @@ public class Link {
         double currentTime = this.scheduler.getCurrentTime();
         double transmitTime = (packet.getSize() * 8.0) / (this.bandwidth * 1000000.0) * 1000.0; // s to ms
 
+        // the time when all buffered items are sent (if buffer is full)
         double currentBufferTime = this.fullBufferTime + currentTime;
-
+        
+        // the estimated time the packet can be sent
         double departTime = Math.max(this.nextAvailableTime, currentTime);
+
         double checkAvailableTime = departTime + transmitTime;
 
         // check whether the buffer is full by seeing if the estimated end time to go through the link
@@ -167,10 +191,6 @@ public class Link {
 
         this.scheduler.schedule(new Event(packet, Event.EventType.ARRIVE, arriveTime, this.toNode));
 
-    }
-
-    public boolean receive(SimplePacket packet) {
-        return false;
     }
 
     @Override
