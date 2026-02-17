@@ -3,12 +3,20 @@ import java.io.FileNotFoundException;
 import java.util.ArrayList;
 import java.util.Scanner;
 
+/**
+ * The network that includes all the nodes and links.
+ */
 public class SimpleNetwork {
-    private ArrayList<Node> hosts;
-    private ArrayList<Node> routers;
-    private ArrayList<Link> links;
+    private ArrayList<Node> hosts;      // all the hosts
+    private ArrayList<Node> routers;    // all the routers
+    private ArrayList<Link> links;      // all the links
     private Scheduler scheduler;
 
+    /**
+     * Constructor
+     * @param filename the topology file to be imported
+     * @param scheduler the scheduler that runs on this network
+     */
     SimpleNetwork(String filename, Scheduler scheduler) {
         setUpTopology(filename);
         this.scheduler = scheduler;
@@ -22,7 +30,13 @@ public class SimpleNetwork {
     }
     public ArrayList<Link> getLinks() {
         return this.links;
-    }
+    } 
+
+    /**
+     * Find node from a given ID
+     * @param ID the ID of the node to be found
+     * @return the node
+     */
     public Node getNodeFromID(short ID) {
         Node node = null;
         for(Node curr: hosts) {
@@ -44,8 +58,8 @@ public class SimpleNetwork {
     }
 
     /**
-     * sets up the topology of hosts and routers
-     * @param mode 0 for default, linear topology with 2 hosts and 1 router, 1 for custom topo from file
+     * Sets up the network with the topology specified in the give file
+     * @param filename the name of the topology file
      */
     private void setUpTopology(String filename) {
 
@@ -71,18 +85,29 @@ public class SimpleNetwork {
         buildRoutingTables();
     }
 
+    /**
+     * Get a single line from the file, process it and add it to the network.
+     * @param features the line of input from a topology file
+     * @return true if success, false otherwise
+     */
     private boolean setUpHelper(String[] features) {
+
+        // adding hosts
         if(features[0].equals("host")) {
-            hosts.add(new Node(features[1], Short.valueOf(features[2]), this, this.scheduler));
+            hosts.add(new Node(features[1], Short.valueOf(features[2]), this));
         }
+        // adding routers
         else if(features[0].equals("router")) {
-            routers.add(new Node(features[1], Short.valueOf(features[2]), this, this.scheduler));
+            routers.add(new Node(features[1], Short.valueOf(features[2]), this));
         }
+        // adding links
         else if(features[0].equals("link")) {
 
             Node n1 = null;
             Node n2 = null;
 
+            // find the nodes that are connected to this link
+            // the nodes should all be before the links in the original file
             for(Node n: hosts) {
                 if(n.getName().equals(features[1])) 
                     n1 = n;
@@ -106,6 +131,7 @@ public class SimpleNetwork {
             double latency;
             double lossrate;
 
+            // grab the configuration values of this link
             try {
                 queueSize = Double.valueOf(features[3]);
                 bandwidth = Double.valueOf(features[4]);
@@ -121,7 +147,6 @@ public class SimpleNetwork {
             links.add(newLink2);
             n1.addLink(n2, newLink1);
             n2.addLink(n1, newLink2);
-
         }
         else {
             System.out.println("File format error");
@@ -130,7 +155,10 @@ public class SimpleNetwork {
         
         return true;
     }
- 
+    
+    /**
+     * Prints the current topology
+     */
     public void printTopo() {
 
         System.out.println("Hosts: ");
@@ -149,28 +177,25 @@ public class SimpleNetwork {
     }
 
     /**
-     * Use BFS to build routing tables for every node, starts at the first host
+     * Helper to build routing tables of every node
      */
     private void buildRoutingTables() {
+
+        // first construct a full list of all nodes
         Node[] nodeList = new Node[hosts.size() + routers.size()];
-        // System.out.println("hosts: ");
         for(int i = 0; i < hosts.size(); i++) {
             nodeList[i] = hosts.get(i);
-            // System.out.println(nodeList[i]);
         }
-        // System.out.println("routers: ");
         for(int i = 0; i < routers.size(); i++) {
             nodeList[hosts.size() + i] = routers.get(i);
-            // System.out.println(nodeList[i]);
         }
-        // System.out.println(" ------ end --------");
+
+        // call the build methods for every node
         for(Node host: hosts) {
             host.buildRoutingTable(nodeList);
-            // host.printTable();
         }
         for(Node router: routers) {
             router.buildRoutingTable(nodeList);
-            // router.printTable();
         }
 
     }
