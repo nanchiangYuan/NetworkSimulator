@@ -2,7 +2,6 @@ import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.Objects;
 import java.util.Queue;
-import java.util.concurrent.ArrayBlockingQueue;
 
 /**
  * Class for routers and hosts.
@@ -10,22 +9,22 @@ import java.util.concurrent.ArrayBlockingQueue;
 public class Node {
     private short ID;
     private String name;
-    private HashMap<Node, Link> routingTable;
+    private HashMap<Node, Link> routingTable;   // Node: a node in the network, Link: the link that can lead to the node
     private HashMap<Node, Link> links;          // for building routing table
     private SimpleNetwork network;
-    private ArrayBlockingQueue<SimplePacket> received;
-    private long timeout;
-    private Scheduler scheduler;
 
-    Node(String nodeName, short nodeID, SimpleNetwork network, Scheduler scheduler) {
+    /**
+     * Constructor
+     * @param nodeName name of the node
+     * @param nodeID ID of the node
+     * @param network the network the node is in
+     */
+    Node(String nodeName, short nodeID, SimpleNetwork network) {
         this.ID = nodeID;
         this.name = nodeName;
         this.routingTable = new HashMap<>();
         this.links = new HashMap<>();
         this.network = network;
-        this.received = new ArrayBlockingQueue<>(1);
-        this.timeout = 0;
-        this.scheduler = scheduler;
     }
 
     public short getID() {
@@ -33,10 +32,6 @@ public class Node {
     }
     public String getName() {
         return this.name;
-    }
-
-    public void setTimeout(long t) {
-        this.timeout = t;
     }
 
     public void addLink(Node node, Link link) {
@@ -56,7 +51,8 @@ public class Node {
     }
 
     /**
-     * BFS for building routing table
+     * Using BFS for creating the routing table
+     * @param nodeList the full list of nodes in the network
      */
     public void buildRoutingTable(Node[] nodeList) {
         this.routingTable = new HashMap<>();
@@ -64,6 +60,7 @@ public class Node {
         HashMap<Node, Integer> distances = new HashMap<>();
         HashMap<Node, Node> parents = new HashMap<>();
 
+        // Set up initial distances
         for(int i = 0; i < nodeList.length; i++) {
             distances.put(nodeList[i], Integer.MAX_VALUE);
             if(nodeList[i].equals(this))
@@ -75,10 +72,9 @@ public class Node {
         unvisited.add(this);
         Queue<Node> visited = new LinkedList<>();
 
-        // System.out.println("table for " + this.toString());
+        // main logic for BFS
         while(!unvisited.isEmpty()) {
-            // for(Node n: unvisited)
-            //     System.out.println("visited: " + n);
+
             Node curr = unvisited.poll();
             visited.add(curr);
             for(Node node : curr.getLinks().keySet()) {
@@ -92,15 +88,15 @@ public class Node {
             }
         }
 
-        // for(Node node: nodeList) {
-        //     System.out.println("   " + node + ", dist: " + distances.get(node) + ", parent: " + parents.get(node));
-        // }
-
+        // creating the routing table
         for(Node node: nodeList) {
             
             int dist = distances.get(node);
+            // filter out the nodes that are either itself or not connected to this one
             if(dist == 0 || dist == Integer.MAX_VALUE)
                 continue;
+
+            // find the link that leads to the destination node and add to table
             Node parent = node;
             while(dist != 1) {
                 parent = parents.get(parent);
@@ -111,9 +107,8 @@ public class Node {
     }
 
     /**
-     * nodes just send packet along by scheduling an event
-     * @param packet
-     * @return
+     * Nodes just send the packet to the link towards the destination of the packet.
+     * @param packet the packet to be sent
      */
     public void send(SimplePacket packet) {
         short destID = packet.getDestinationID();
@@ -132,11 +127,6 @@ public class Node {
         linkToSend.send(packet);
     }
 
-    public boolean receive(SimplePacket packet) {
-        
-        return false;
-    }
-
     public String toString() {
         return "Node: ID: " + this.ID + ", Name: " + this.name;
     }
@@ -153,11 +143,14 @@ public class Node {
         }
         return false;
     }
+    
     @Override
     public int hashCode() {
         return Objects.hash(this.ID, this.name);
     }
-
+    /**
+     * Prints the routing table for this node
+     */
     public void printTable() {
         System.out.println("=== Table for " + this.toString() + " ===");
         for(HashMap.Entry<Node, Link> entry: routingTable.entrySet()) {
