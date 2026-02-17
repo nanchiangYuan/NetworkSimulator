@@ -10,8 +10,7 @@ import java.util.HashMap;
  */
 public class TCPrecver{
     private String filename;            // output file
-    private int mtu;
-    private int bufferSize;                    // buffer size
+    private int bufferSize;             // buffer size
     private HashMap<Integer, TCPmessage> buffer;
     private int sequenceNo;
 
@@ -21,36 +20,30 @@ public class TCPrecver{
 
     private int expectedSeq;            // the next expected sequence from sender
 
-    private FileOutputStream output;
+    private FileOutputStream output;    // to output into a file
     private boolean verbose;
     private Scheduler scheduler;
 
     private State state;
 
-    // final stats
-    private int invalidChecksumCount = 0;
-    private int droppedPacketCount = 0;
-    private int receivedPacketCount = 0;
-    private int receivedDataSize = 0;
-    private int sentPacketCount = 0;
-    private int sentDataSize = 0;
-
     private TCPStat stat;
 
     /**
-     * constructor
-     * @param port
-     * @param filename
-     * @param mtu
-     * @param bufferSize
+     * Constructor
+     * @param sourceID this node (receiver)
+     * @param destID the sender node
+     * @param node this node (receiver)
+     * @param filename the filename of the file to be written to
+     * @param bufferSize size of the receive buffer
+     * @param sched the scheduler of this network
+     * @param v verbose
      */
-    TCPrecver(short sourceID, short destID, Node node, String filename, int mtu, int bufferSize, Scheduler sched, boolean v) {
+    TCPrecver(short sourceID, short destID, Node node, String filename, int bufferSize, Scheduler sched, boolean v) {
 
         this.sourceID = sourceID;
         this.destinationID = destID;
         this.filename = filename;
         this.node = node;
-        this.mtu = mtu;
         this.bufferSize = bufferSize;
         this.scheduler = sched;
         this.state = State.CLOSED;
@@ -67,6 +60,9 @@ public class TCPrecver{
         return stat;
     }
 
+    /**
+     * Starts up the receiver and preparing for file writing
+     */
     public void listen() {
         state = State.LISTEN;
 
@@ -79,22 +75,29 @@ public class TCPrecver{
         }
     }
 
+    /**
+     * Directs flow according to the state the receiver is in.
+     * @param packet the received packet
+     */
     public void receive(SimplePacket packet) {
 
+        // first checks for corrupted data
         if(!checksumCheck(packet.getPayload())) {
             stat.addInvalidChecksum(1);
             return;
         }
 
-        // retrieve payload
+        // process the packet received
         TCPmessage message = new TCPmessage(0, 0, 0, 0);
         message = message.deserialize(packet.getPayload());
 
         stat.addReceivedData(1, message.getLength());
         stat.printPackets(message, "rcv", scheduler.getCurrentTime(), verbose);
 
+        // different logic for different states
         switch(state) {
 
+            // when the network just started and waiting for sender
             case State.LISTEN:
                 if(message.isSYN()) {
                     initConnectionResponse(message);
@@ -102,6 +105,7 @@ public class TCPrecver{
                 }
                 break;
 
+            // just after receiving the syn from sender
             case State.SYN_RCVD:
                 if(message.isACK() && message.getSequenceNo() == expectedSeq)
                     state = State.ESTABLISHED;
@@ -109,16 +113,18 @@ public class TCPrecver{
                     sequenceNo -= 1;
                     initConnectionResponse(message);
                 }
-                    
                 break;
-            
+
+            // connection established
             case State.ESTABLISHED:
                 receiveData(message);
                 break;
 
+            // connection is closed
             case State.CLOSED:
                 break;
-            
+
+            // after sender initiates termination
             case State.LAST_ACK:
                 if(message.isFIN()) {
                     sequenceNo -= 2;
@@ -133,10 +139,14 @@ public class TCPrecver{
         }
 
     }
-
+    /**
+     * Processes the received packet
+     * @param message the received packet
+     */
     private void receiveData(TCPmessage message) {
 
         int receivedSeqNo = message.getSequenceNo();
+
         // if the received packet has a seq number smaller than what the receiver is expecting
         // drop it and send ack again
         if(receivedSeqNo < expectedSeq) {
@@ -148,12 +158,14 @@ public class TCPrecver{
         // if received seq number is bigger, put in buffer
         // but if buffer is full, drop it
         else if(receivedSeqNo > expectedSeq) {
+
             if(buffer.size() < bufferSize && !buffer.containsKey(receivedSeqNo))
                 buffer.put(receivedSeqNo, message);
             else
                 stat.addDroppedPacket(1);
             TCPmessage ack = new TCPmessage(sequenceNo, expectedSeq, 0, message.getTimestamp());
             sendAck(ack);
+
         // if packet is exactly what the receiver wants, just write to file
         } else if (message.getPayload() != null){
 
@@ -173,6 +185,7 @@ public class TCPrecver{
             }
             
             expectedSeq = Math.max(expectedSeq + message.getLength(), expectedSeq + 1);
+
             // if buffer has segments immediately afterwards, write to file also
             while(buffer.containsKey(expectedSeq)) {
                 TCPmessage toBeWritten = buffer.remove(expectedSeq);
@@ -198,14 +211,21 @@ public class TCPrecver{
                 
                 expectedSeq = Math.max(expectedSeq + toBeWritten.getLength(), expectedSeq + 1);
             }
+
             // send ack for the segment that is written
             TCPmessage ack = new TCPmessage(sequenceNo, expectedSeq, 0, message.getTimestamp());
             sendAck(ack);
+        
+        // start termination if receives a fin
         } else if(message.isFIN()) {
             terminateConnectionAck(message);
         }
     }
 
+    /**
+     * Helper method to send packets
+     * @param message the packet to be sent
+     */
     private void sendPacket(TCPmessage message) {
 
         message.setAcknowledgment(expectedSeq); // expected seqNo from receiver will be different, build packet only when sending
@@ -221,7 +241,7 @@ public class TCPrecver{
 
     /**
      * initialization ack response
-     * @param received
+     * @param received the received packet
      */
     public void initConnectionResponse(TCPmessage received) {
 
@@ -237,10 +257,8 @@ public class TCPrecver{
     }
     
     /**
-     * simple function that send acks
-     * @param printMessage error message
-     * @param time timestamp from first message
-     * @return
+     * Sends ack messages
+     * @param ack the packet to be sent
      */
     public void sendAck(TCPmessage ack) {
 
@@ -249,8 +267,8 @@ public class TCPrecver{
     }
 
     /**
-     * send ack response to sender fin segment
-     * @param senderAckNo
+     * Sends ack for termination
+     * @param message the packet to be sent
      */
     public void terminateConnectionAck(TCPmessage message) {
 
@@ -270,7 +288,8 @@ public class TCPrecver{
     }
 
     /**
-     * wait for last fin ack from sender for a couple of seconds
+     * Wait for last fin ack from sender then close
+     * @param message the packet received
      */
     public void waitForAck(TCPmessage message) {
 
@@ -286,6 +305,12 @@ public class TCPrecver{
         }
     }
 
+    /**
+     * Checks if the data received is corrupted.
+     * Code partly from UW Madison CS640 2025 Fall Labs
+     * @param payload The byte sequence of the payload of packet
+     * @return true if no corruption, false otherwise
+     */
     public boolean checksumCheck(byte[] payload) {
 
         ByteBuffer forChecksum = ByteBuffer.wrap(payload);

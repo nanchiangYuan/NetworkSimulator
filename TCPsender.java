@@ -198,14 +198,17 @@ public class TCPsender {
         
         // based on state, execute different logic
         switch(state) {
+            // just started the initiation of connection
             case State.SYN_SENT:
                 initWaitForAck(message);
                 lastAck = message.getSequenceNo();
                 state = State.ESTABLISHED;
                 break;
+            // established connection
             case State.ESTABLISHED:
                 processPacket(message);
                 break;
+            // right after sender initialized termination
             case State.FIN_WAIT_1:
                 // if received fin from receiver, enter termination function
                 if(message.isFIN()) 
