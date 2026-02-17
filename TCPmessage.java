@@ -4,12 +4,12 @@ import java.nio.ByteBuffer;
  * Class for a TCP segment
  */
 public class TCPmessage{
-    private int sequenceNo;
-    private int acknowledgment;
-    private double timestamp;
-    private int length;
-    private int flags;
-    private short checksum;
+    private int sequenceNo;         // 4 bytes
+    private int acknowledgment;     // 4 bytes
+    private double timestamp;       // 8 bytes
+    private int length;             // 4 bytes (in packet: 29 bits)
+    private int flags;              // 4 bytes (in packet: 3 bits)
+    private short checksum;         // 2 bytes
     private byte[] payload;
 
     public final static int HEADER_LENGTH = 24;
@@ -17,7 +17,14 @@ public class TCPmessage{
     private boolean Sflag;
     private boolean Fflag;
     private boolean Aflag;
-
+    
+    /**
+     * Constructor for a TCP segment
+     * @param sequenceNo the sequence number
+     * @param acknowledgment the value to be put in acknowledgement
+     * @param length the length of the payload
+     * @param currentTime the time this segment is created
+     */
     TCPmessage(int sequenceNo, int acknowledgment, int length, double currentTime) {
         this.sequenceNo = sequenceNo;
         this.acknowledgment = acknowledgment;
@@ -113,6 +120,11 @@ public class TCPmessage{
         this.checksum = 0;
     }
 
+    /**
+     * Turn this segment into a byte array.
+     * Code partly from UW Madison CS640 2025 Fall Labs.
+     * @return a byte array of this segment
+     */
     public byte[] serialize() {
         this.checksum = 0;
 
@@ -158,6 +170,12 @@ public class TCPmessage{
         return data;
     }
 
+    /**
+     * Turn the byte array of a segment back into an object.
+     * Code partly from UW Madison CS640 2025 Fall Labs.
+     * @param data
+     * @return
+     */
     public TCPmessage deserialize(byte[] data) {
 
         ByteBuffer bb = ByteBuffer.wrap(data);
