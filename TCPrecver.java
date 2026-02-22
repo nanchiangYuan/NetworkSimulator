@@ -307,7 +307,7 @@ public class TCPrecver{
 
     /**
      * Checks if the data received is corrupted.
-     * Code partly from UW Madison CS640 2025 Fall Labs
+     * Code partly from school labs
      * @param payload The byte sequence of the payload of packet
      * @return true if no corruption, false otherwise
      */
