@@ -49,7 +49,6 @@ public class Link {
         this.scheduler = scheduler;
         this.fullBufferTime = (this.bufferSize * 8.0) / (this.bandwidth * 1000000.0) * 1000.0;  // in ms
         this.id = idPool;
-        this.lossRate = 0.0;
         this.corruptionRate = 0.01;
         idPool++; 
 
