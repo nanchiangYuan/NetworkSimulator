@@ -10,15 +10,17 @@ A simple network simulator for testing TCP functionality, including connection e
 ### Reliable Data Transfer
  + Tracks sequence numbers and acknoledgements
  + Uses a checksum check to ensure data integrity (there is a default 0.01 corruption rate on the data in this simulator)
- + 
+ + Uses RFC 6298 TCP retransmission timer algorithm to calculate timeout 
+ + Uses a sliding window for flow control
 
 ### Reno Congestion Control
  + Dynamic congestion window management
- + Implements slow start, 
- + Fast retransmission
+ + Implements slow start, congestion avoidance and fast recovery
+ + Fast retransmission after receiving 3 duplicate acks
 
 ### Discrete Event Simulation
- + 
+ + Uses a priority queue to schedule events of the simulation
+ + Uses a universal timer to keep track of timed out packets
  
 ## Usage
 ### How to Run
@@ -29,7 +31,7 @@ A simple network simulator for testing TCP functionality, including connection e
     For hosts, the format should be: `host <host_name> <host_id>`.  
     For routers, the format should be: `router <router_name> <router_id>`.  
     For links, the format should be: `link <node_name> <node_name> <buffer_size> <bandwidth> <latency> <loss_rate>`
-     + buffer size is in bytes, bandwidth is in Mbps, latency is in ms, and loss rate has the lowest at 0.0 and highest at 1.0
+     + buffer size is in bytes, bandwidth is in Mbps, latency is in ms, and loss rate is in %
 
     The topology file should look like the following example:  
     ```
@@ -65,13 +67,30 @@ A simple network simulator for testing TCP functionality, including connection e
     `help` : shows you what commands and flags you can use
     `exit` : exits the simulator
 
-### The Default Tests
-1. For buffer size:
-2. For bandwidth:    
+### The Default Sweep Tests
+1. Default link configurations:
+ + bottleneck links: 
+   - buffer size: 50 packets (around 75 KB)
+   - bandwidth: 10 Mbps
+   - latency: 20 ms
+   - loss rate: 0.0 %
+ + other links:
+   - buffer size: 10 MB
+   - bandwidth: 1 Gbps
+   - latency: 1 ms
+   - loss rate: 0.0 %
+
+2. Buffer size test: does 6 tests with varying buffer sizes, 3, 5, 10, 30, 50, 80 packets
+
+3. Bandwidth test: does 6 tests with varying bandwidths, 1, 10, 30, 50, 75, 100 Mbps
+
+4. Latency test: does 6 tests with varying latencies, 1, 5, 10, 25, 50, 100 ms
+
+4. Loss rate test: does 7 tests with varying loss rates, 0.0, 0.01, 0.1, 0.5, 1, 2, 5 %
 
 ### Example Output
 Command:  
-`run -s 1 -d 4 -t latency -l r1:r2 -f 10`
+`run -s 1 -d 4 -t latency -l r1:r2 -f 10`  
 Result: 
 ```
 ================================================================
