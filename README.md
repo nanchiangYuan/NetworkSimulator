@@ -9,10 +9,13 @@ A simple network simulator for testing TCP functionality, including connection e
 
 ### Reliable Data Transfer
  + Tracks sequence numbers and ack numbers
+ + Uses a checksum check to ensure data integrity (there is a default 0.01 corruption rate on the data in this simulator)
  + 
+
 ### Reno Congestion Control
-### Network Simulator Features
+### Discrete Event Simulation
  + 
+ 
 ## Usage
 ### How to Run
 1.  Before starting the network simulator, you'll need to prepare a topology file to set the the network topology.
@@ -42,17 +45,29 @@ A simple network simulator for testing TCP functionality, including connection e
     `setup <your_topo_file>`
     then the network is set up.
     
-3.  Now to the tests. 
+3.  The tests that can be run in this simulator are sweep tests. On the highest level, there are two options. You can 
+    run them with your own configurations, or have the network run with built in configurations.
+    To run tests with built in configurations, run
+    `run -s <start_host_ID> -d <destination_host_ID> -l <link_to_do_sweep_tests_on> -t <test_to_run>`
+    <test_to_run> includes `latency`, `bandwidth`, `buffersize` and `lossrate`. 
 
-4. Here are some customization you can make to the tests and the network.
+    The above command and flags are required in order to run any tests. There are also optional flags you can add to customize the tests more:
+    '-r <lowest>:<highest>:<step>`
+
+
+4.  Other commands
+    `showconfig` : shows the configuration of the network and the topology
+    `help` : shows you what commands and flags you can use
+    `exit` : exits the simulator
 
 ### The Tests
     
 
+### Example Output
 
 ## Notes
 ### Personal Log
-At first I tried to use thread
+ + At first I tried to use threads to set up the network, which made sense to me because the sender and receiver should both be actively listening and sending. However, I soon realized that debugging such a multi-threaded approach may cause unwanted trouble for me and cause me to lose focus as my main goal is to implement TCP protocol itself. So, I switched to making it a discrete event simulation.
 
 
 
