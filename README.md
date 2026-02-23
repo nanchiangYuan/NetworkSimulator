@@ -18,13 +18,13 @@ A simple network simulator for testing TCP functionality, including connection e
 1.  Before starting the network simulator, you'll need to prepare a topology file to set the the network topology.
     To simplify the network without adding too much and take away from its main purpose (which is to run tests on my TCP implementation), there are only three entities in this network: the hosts, routers and links. 
 
-    In the topology file you'll be giving to the network should have lines similar to below to represent hosts, routers, links, and the configurations for the links.
-    For hosts, the format should be: `host <host_name> <host_id>`.
-    For routers, the format should be: `router <router_name> <router_id>`.
+    In the topology file you'll be giving to the network should have lines similar to below to represent hosts, routers, links, and the configurations for the links.  
+    For hosts, the format should be: `host <host_name> <host_id>`.  
+    For routers, the format should be: `router <router_name> <router_id>`.  
     For links, the format should be: `link <node_name> <node_name> <buffer_size> <bandwidth> <latency> <loss_rate>`
      + buffer size is in bytes, bandwidth is in Mbps, latency is in ms, and loss rate has the lowest at 0.0 and highest at 1.0
 
-    The topology file should look like the following example:
+    The topology file should look like the following example:  
     ```
     host h1 1
     host h2 2
