@@ -21,8 +21,36 @@ A simple network simulator for testing TCP functionality, including connection e
 ### Discrete Event Simulation
  + Uses a priority queue to schedule events of the simulation
  + Uses a universal timer to keep track of timed out packets
- 
+
+## Project Structure
+ + `NetworkSimulator.java`: where main is, the command loop of the simulator
+ + `SimpleNetwork.java`: the network object, stores all the links and nodes and the topology
+ + `Scheduler.java`: store the events that are scheduled, including arrival events and timeout event
+ + `Event.java`: the event object, keeps track of time and the packets involved in the event
+ + `Link.java`: the link object, stores the configuration of the link, what nodes it's conencted to, and runs the main logic of advancing time based on latency, bandwidth, loss rate, buffer size and corruption rate
+ + `Node.java`: the node object, routers and hosts, just passes the packets to corresponding links
+ + `SimplePacket.java`: a packet object to wrap TCP segments in, made for this network
+ + `TCPmessage.java`: TCP segment object
+ + `State.java`: states for the state machine
+ + `TCPsender.java`: the TCP endpoint that sends data
+ + `TCPrecver.java`: the TCP endpoint that receives date
+ + `TCPStat.java`: an object that keeps track of the statistics I want to track
+ + `TCPFinalStat.java`: an object that deals with the final calculation of the statistics
+
 ## Usage
+### Compile
+1. Make sure `java` and `javac` is installed  
+
+2. Compile all java files with:  
+   ```
+   java *.java
+   ```  
+
+3. Then to run just do:
+   ```
+   java NetworkSimulator
+   ```  
+   
 ### How to Run
 1.  Before starting the network simulator, you'll need to prepare a topology file to set the the network topology.
     To simplify the network without adding too much and take away from its main purpose (which is to run tests on my TCP implementation), there are only three entities in this network: the hosts, routers and links. 
