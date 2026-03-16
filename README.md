@@ -8,7 +8,7 @@ A simple network simulator for testing TCP functionality, including connection e
  + Tears down connection with a four-way handshake
 
 ### Reliable Data Transfer
- + Tracks sequence numbers and acknoledgements
+ + Tracks sequence numbers and acknowledgements
  + Uses a checksum check to ensure data integrity (there is a default 0.01 corruption rate on the data in this simulator)
  + Uses RFC 6298 TCP retransmission timer algorithm to calculate timeout 
  + Uses a sliding window for flow control
@@ -50,7 +50,7 @@ A simple network simulator for testing TCP functionality, including connection e
    ```
    java NetworkSimulator
    ```  
-   
+
 ### How to Run
 1.  Before starting the network simulator, you'll need to prepare a topology file to set the the network topology.
     To simplify the network without adding too much and take away from its main purpose (which is to run tests on my TCP implementation), there are only three entities in this network: the hosts, routers and links. 
